@@ -27,6 +27,28 @@ LAT_NGOAI = 60.0
 CHONG_LAN = 3.0
 
 
+def _hon_hop(dev: str):
+    """Chế độ tính hỗn hợp: phép nào an toàn thì chạy nửa độ chính xác.
+
+    Đo trên card RTX 3050: NHANH GẤP 2,27 LẦN (3,54s -> 1,56s cho đoạn 30
+    giây), sai lệch so với bản đầy đủ là -62 dB dưới tín hiệu — dưới ngưỡng
+    tai nghe ra.
+
+    Vì sao là autocast chứ không phải model.half(): htdemucs làm biến đổi
+    Fourier, mà số phức nửa độ chính xác trong PyTorch còn ở dạng thử nghiệm —
+    ép .half() là văng "expected scalar type Float but found Half". autocast
+    thì để riêng những phép ấy ở fp32.
+
+    ĐÃ THỬ VÀ LOẠI: giảm chồng lấn giữa các lát (overlap 0.25 -> 0.10) cũng
+    nhanh tương đương, nhưng sai lệch tới -24 dB, tức NGHE RA ĐƯỢC. Nhanh mà
+    đổi cả chất tiếng thì không phải tối ưu, là đánh đổi.
+    """
+    import contextlib
+    if dev != "cuda" or not config.NUA_DO_CHINH_XAC:
+        return contextlib.nullcontext()
+    return torch.autocast("cuda", dtype=torch.float16)
+
+
 def thiet_bi() -> str:
     return "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -106,7 +128,7 @@ def tach_giong(
         do_lech = lat.std() + 1e-8
         lat = (lat - tb) / do_lech
 
-        with torch.no_grad():
+        with torch.no_grad(), _hon_hop(dev):
             ra = apply_model(
                 model, lat[None], shifts=0, split=True, overlap=0.25,
                 device=dev, segment=config.DEMUCS_SEGMENT, progress=False,

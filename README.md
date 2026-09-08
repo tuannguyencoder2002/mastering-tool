@@ -224,6 +224,43 @@ so với chỉ master (7,8 so với 7,7). Phần mất đi 1,6 dB là cái giá 
 Phần EQ, nén, bão hoà, hạn đỉnh, matchering **chạy hoàn toàn trên CPU** — chỉ
 mỗi Demucs muốn GPU cho nhanh, mà không có cũng chạy.
 
+## Tốc độ: đã tối ưu ở đâu, và không tối ưu ở đâu
+
+Đo trên RTX 3050 Laptop 4 GB. Bài 3:11, chế độ đầy đủ, tách stem thật:
+**40 giây** (trước khi tối ưu là ~60 giây quy về cùng độ dài).
+
+Thời gian đi đâu:
+
+| Khối | Thời gian | Chạy ở |
+|---|---|---|
+| Tách stem (Demucs) | ~5s | **GPU** |
+| Cắt trầm · khử xì · EQ · nén ×2 · nhân đôi | 2,9s | CPU |
+| Chuẩn độ lớn + hạn đỉnh liên mẫu | ~7s | CPU |
+| Vang (nếu bật) | 4s | CPU |
+
+**Hai chỗ đã tối ưu, có số đo:**
+
+*Chế độ tính hỗn hợp cho Demucs* — nhanh gấp **2,27 lần** (3,54s → 1,56s trên
+đoạn 30 giây), sai lệch **−62 dB** dưới tín hiệu, dưới ngưỡng tai nghe ra.
+Dùng `torch.autocast` chứ không phải `model.half()`: htdemucs làm biến đổi
+Fourier, mà số phức nửa độ chính xác trong PyTorch còn thử nghiệm nên ép
+`.half()` là văng lỗi ngay. Cần bản trùng khớp từng bit thì đặt `DEMUCS_FP32=1`.
+
+*Khối vang* — nhanh gấp **17 lần** (1,96s → 0,11s), kết quả **trùng khớp tuyệt
+đối** (lệch 0,000). Bộ lặp hồi tiếp trước viết bằng `lfilter` với mẫu số dài
+1900, mà `lfilter` chạy theo *số mẫu × bậc bộ lọc* — 16 tỉ phép cho một bộ,
+mà có bốn bộ. Viết lại thành hồi tiếp theo từng khối 1900 mẫu: trong một khối
+không mẫu nào phụ thuộc mẫu nào nên cộng cả khối một lần bằng numpy.
+
+**Đã thử và LOẠI:** giảm chồng lấn giữa các lát Demucs (0,25 → 0,10) cũng
+nhanh tương đương, nhưng sai lệch tới **−24 dB**, tức **nghe ra được**. Nhanh
+mà đổi cả chất tiếng thì không phải tối ưu, là đánh đổi.
+
+**Vì sao không đưa phần xử lý tín hiệu lên GPU:** đo ra thì chỗ chậm nhất còn
+lại là hàm lấy mẫu dày gấp bốn của scipy (1,29s mỗi lượt) — đã là mã C. Các
+vòng lặp Python chỉ tốn 0,2s. Còn máy nén và máy hạn đỉnh thì bản chất là tuần
+tự (mẫu sau phụ thuộc mẫu trước), là dạng bài GPU làm rất kém.
+
 ## Giới hạn cần biết trước
 
 - **Tách stem không hoàn hảo.** Demucs để lại một chút nhạc nền trong track
