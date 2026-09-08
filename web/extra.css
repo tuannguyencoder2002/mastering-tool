@@ -1,0 +1,121 @@
+/* Phần riêng của Mastering: nút chọn thành cặp, thanh kéo, khối so A/B. */
+
+.doi {
+  display: flex;
+  gap: 6px;
+}
+
+.doi button {
+  flex: 1;
+  height: 32px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.doi button.chon {
+  background: var(--nhan);
+  border-color: var(--nhan);
+  color: #fff;
+}
+
+.ghi {
+  font-size: 11px;
+  color: var(--mo);
+  margin: 7px 0 0;
+  line-height: 1.5;
+}
+
+.keo {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 4px 8px;
+  margin-bottom: 11px;
+}
+
+.keo span { font-size: 12px; color: var(--mo); }
+
+.keo b {
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--chu);
+  font-weight: 550;
+}
+
+.keo input[type="range"] {
+  grid-column: 1 / -1;
+  width: 100%;
+  height: 3px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--vien);
+  border-radius: 2px;
+  outline: none;
+}
+
+.keo input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--nhan);
+  cursor: pointer;
+  border: none;
+}
+
+.nho-tha {
+  margin-top: 12px;
+  padding: 11px 12px;
+}
+
+.nho-tha .to { font-size: 12px; }
+
+.ab {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.ab button {
+  flex: 1;
+  height: 40px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ab button.chon {
+  background: var(--nhan);
+  border-color: var(--nhan);
+  color: #fff;
+}
+
+.ab button:disabled { opacity: .3; }
+
+.song { margin-top: 14px; }
+
+/* Dòng cảnh báo dưới khối số liệu. Vàng chứ không đỏ: đây là lời nhắc cân
+   nhắc, không phải lỗi — kết quả vẫn dùng được, chỉ là đánh đổi không đáng. */
+.canh-bao {
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--vua);
+  background: rgba(245, 158, 11, .08);
+  border: 1px solid rgba(245, 158, 11, .25);
+  border-radius: var(--bo);
+  padding: 8px 11px;
+  margin: 0 0 14px;
+}
+
+/* Nhắc phím tắt. Để ngay dưới thanh điều khiển chứ không giấu trong trang trợ
+   giúp: thao tác nào không ai biết là có thì coi như không tồn tại. */
+.meo-hang { margin: -8px 0 16px; }
+
+.meo {
+  font-size: 10.5px;
+  color: #5a5a63;
+  line-height: 1.5;
+}
+
+/* Con trỏ đổi theo chỗ: thân sóng kéo được nên hiện bàn tay. */
+.song { cursor: grab; }
+.song:active { cursor: grabbing; }

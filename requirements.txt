@@ -1,0 +1,36 @@
+# Máy đang dùng chạy trong venv có sẵn:
+#   C:\Users\Lenovo\Sumo\PPO_Train\Script\Scripts\python.exe
+#
+# Cài trên máy mới (Python 3.10 hoặc 3.11, Windows có card NVIDIA):
+#
+#   pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu124
+#   pip install --no-deps demucs==4.0.1
+#   pip install -r requirements.txt
+#
+# CHÚ Ý về demucs: bản 4.0.1 trên PyPI ghi chặn torchaudio<2.1, cài kiểu thường
+# là pip hạ torchaudio xuống và torch gãy theo. Phải cài --no-deps rồi tự cài
+# các gói phụ ở dưới.
+#
+# Máy không có card NVIDIA: bỏ "--index-url ..." ở dòng torch, mọi thứ vẫn chạy
+# trên CPU, chỉ chậm hơn khoảng 4-5 lần.
+#
+# Ngoài Python còn cần ffmpeg và ffprobe nằm trong PATH.
+
+# --- gói phụ của demucs (vì đã cài --no-deps) ---
+dora-search
+einops
+julius
+lameenc
+openunmix
+treetable
+
+# --- máy chủ ---
+fastapi>=0.115
+uvicorn>=0.34
+python-multipart
+
+# --- xử lý số ---
+numpy>=1.26,<2
+scipy>=1.11
+pyloudnorm
+matchering

@@ -1,0 +1,32 @@
+# Dự án 8,7 GB nhưng mã nguồn chỉ chừng 250 KB. Mọi thứ nặng ở đây đều là thứ
+# TÁI TẠO ĐƯỢC — model tải về, bản đóng gói, file người dùng thả vào — nên
+# không có lý do gì đưa lên git.
+
+# Bản đóng gói (4,4 GB): dựng lại bằng dong-goi.ps1
+dist/
+
+# Dữ liệu chạy (4,4 GB): model tự tải ở lần chạy đầu, file người dùng là của họ
+data/
+
+# Cửa sổ ứng dụng tự tạo hồ sơ trình duyệt riêng ở đây
+*/cua_so/
+
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Người dùng Windows hay để lẫn mấy file này vào
+Thumbs.db
+desktop.ini
+
+# Bài nhạc của khách. Nội dung có bản quyền của họ, không phải mã nguồn của
+# mình — để trong repo là mang tài sản của khách đi gửi chỗ khác.
+*.mp3
+*.wav
+*.flac
+*.m4a
+
+# cloudflared.exe 52 MB, tải lại được bằng một dòng lệnh (xem chia_se.py)
+runtime/

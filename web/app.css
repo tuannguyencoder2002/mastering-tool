@@ -1,0 +1,422 @@
+/* Phông nằm sẵn trong dự án, KHÔNG gọi Google Fonts: app chạy offline trên máy
+   khách, gọi mạng thì chữ rơi về phông mặc định và giao diện khác hẳn. */
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("./fonts/inter-latin.woff2") format("woff2");
+}
+
+:root {
+  --nen: #0b0b0d;
+  --noi: #131316;
+  --noi2: #191920;
+  --vien: #232329;
+  --chu: #ededf0;
+  --mo: #8b8b93;
+  --nhan: #6e63f2;
+  --nhan2: #887ff4;
+  --tot: #34d399;
+  --vua: #f59e0b;
+  --te: #f43f5e;
+
+  --bo: 8px;
+  --cao: 36px;
+  --khe: 14px;
+}
+
+* { box-sizing: border-box; }
+
+/* Thuộc tính `hidden` phải thắng mọi luật display.
+   BẪY: trình duyệt ẩn phần tử có `hidden` bằng một luật `display:none` ở mức
+   thấp nhất, nên BẤT KỲ luật nào của mình có `display:` cũng đè lên nó. Ở đây
+   `.trong { display: flex }` làm khối "No result yet" không bao giờ ẩn đi —
+   nó vẫn chiếm nguyên chiều cao cột và đẩy bảng kết quả xuống dưới màn hình.
+   Không lỗi, không cảnh báo, và chỉ lộ ra khi mở bằng mắt. */
+[hidden] { display: none !important; }
+
+
+html, body { height: 100%; margin: 0; }
+
+body {
+  background: var(--nen);
+  color: var(--chu);
+  font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: #303036; border-radius: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* ------------------------------------------------------------------ khung */
+
+.khung {
+  display: grid;
+  grid-template-rows: 48px 1fr;
+  height: 100%;
+}
+
+.thanh-tren {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--vien);
+  background: var(--noi);
+}
+
+.ten {
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.2px;
+}
+
+.cham {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--nhan);
+  box-shadow: 0 0 10px var(--nhan);
+}
+
+.day { flex: 1; }
+
+.the {
+  font-size: 11px;
+  color: var(--mo);
+  padding: 3px 9px;
+  border: 1px solid var(--vien);
+  border-radius: 20px;
+}
+
+.the.on { color: var(--tot); border-color: #245c47; }
+
+.than {
+  display: grid;
+  gap: 1px;
+  background: var(--vien);
+  min-height: 0;
+}
+
+.cot {
+  background: var(--nen);
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* ------------------------------------------------------------------ nhập */
+
+.nhan {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--mo);
+  margin: 0 0 7px;
+  font-weight: 600;
+}
+
+.tha {
+  border: 1px dashed #34343d;
+  border-radius: var(--bo);
+  background: var(--noi);
+  padding: 18px 14px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+
+.tha:hover, .tha.keo { border-color: var(--nhan); background: var(--noi2); }
+
+.tha .to { font-size: 13px; font-weight: 600; }
+.tha .nho { font-size: 11px; color: var(--mo); margin-top: 3px; }
+
+textarea {
+  width: 100%;
+  height: 300px;
+  resize: vertical;
+  background: var(--noi);
+  color: var(--chu);
+  border: 1px solid var(--vien);
+  border-radius: var(--bo);
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.7;
+  outline: none;
+}
+
+textarea:focus { border-color: var(--nhan); }
+
+.hang {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.o-chon {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  color: var(--mo);
+  font-size: 12px;
+  user-select: none;
+}
+
+.o-chon input { accent-color: var(--nhan); width: 14px; height: 14px; }
+.o-chon:hover { color: var(--chu); }
+
+button {
+  height: var(--cao);
+  padding: 0 18px;
+  border-radius: var(--bo);
+  border: 1px solid var(--vien);
+  background: var(--noi2);
+  color: var(--chu);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 550;
+  cursor: pointer;
+  transition: background .15s, border-color .15s, opacity .15s;
+}
+
+button:hover:not(:disabled) { background: #23232b; border-color: #3a3a44; }
+button:disabled { opacity: .4; cursor: default; }
+
+button.chinh {
+  width: 100%;
+  background: var(--nhan);
+  border-color: var(--nhan);
+  font-weight: 600;
+}
+
+button.chinh:hover:not(:disabled) { background: var(--nhan2); border-color: var(--nhan2); }
+
+button.nho { height: 26px; padding: 0 10px; font-size: 11.5px; }
+
+.muc { margin-bottom: 18px; }
+
+/* ------------------------------------------------------------------ tiến độ */
+
+.tien {
+  height: 3px;
+  background: var(--vien);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 12px;
+}
+
+.tien i {
+  display: block;
+  height: 100%;
+  background: var(--nhan);
+  width: 0;
+  transition: width .3s ease;
+}
+
+.trang-thai {
+  font-size: 11.5px;
+  color: var(--mo);
+  margin-top: 6px;
+  min-height: 16px;
+}
+
+.trang-thai.loi { color: var(--te); }
+
+/* ------------------------------------------------------------------ kết quả */
+
+.trong {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: #4a4a54;
+}
+
+.trong svg { opacity: .5; }
+
+.song {
+  width: 100%;
+  background: var(--noi);
+  border: 1px solid var(--vien);
+  border-radius: var(--bo);
+  display: block;
+  cursor: pointer;
+}
+
+.dieu-khien {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0 16px;
+}
+
+.gio {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--mo);
+}
+
+.bang { width: 100%; border-collapse: collapse; }
+
+.bang th {
+  text-align: left;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: var(--mo);
+  font-weight: 600;
+  padding: 0 8px 8px;
+  border-bottom: 1px solid var(--vien);
+  position: sticky;
+  top: 0;
+  background: var(--nen);
+}
+
+.bang td {
+  padding: 7px 8px;
+  border-bottom: 1px solid #1a1a20;
+  vertical-align: middle;
+}
+
+.bang tr { cursor: pointer; }
+.bang tr:hover td { background: var(--noi); }
+.bang tr.dang td { background: #1c1a2e; }
+
+.tg {
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  color: var(--mo);
+  white-space: nowrap;
+}
+
+.diem {
+  width: 42px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--vien);
+  overflow: hidden;
+}
+
+.diem i { display: block; height: 100%; }
+
+.xuat {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--vien);
+}
+
+.so-lieu {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 14px;
+}
+
+.so-lieu div { }
+.so-lieu b { display: block; font-size: 18px; font-weight: 600; line-height: 1.2; }
+.so-lieu span { font-size: 10.5px; text-transform: uppercase; letter-spacing: .5px; color: var(--mo); }
+
+/* ============================================================ theo cỡ màn
+
+   Mốc lấy theo bề ngang THẬT của những máy sẽ chạy app này, không lấy mốc
+   mặc định của thư viện nào cả. Nhớ rằng mức phóng của Windows đã được trình
+   duyệt quy đổi sẵn, nên một màn 1080p ở mức phóng 125% báo về là 1536:
+
+     1280   laptop 13-14" ở mức phóng 150%
+     1440   laptop 1080p ở 150%
+     1536   laptop 1080p ở 125%  <- mức phóng mặc định của Windows
+     1680   laptop 14-16" màn sắc nét
+     1920   màn rời 24" 1080p ở 100%
+     2400   màn rời 27" 1440p ở 100% (2560)
+
+   Hai thứ phải giãn theo màn, và chúng giãn KHÁC nhau:
+
+   - Cột trái nới ra vừa phải. Nó chứa các ô nhập bề ngang cố định, nới quá
+     thì chữ với ô nhập trôi xa nhau, mắt phải nhảy.
+   - Cột phải PHẢI CÓ TRẦN. Không chặn thì trên màn 27" một bảng chữ dàn ngang
+     hơn hai nghìn điểm ảnh: mắt đọc hết dòng rồi phải quét ngược cả màn hình
+     để tìm đầu dòng sau. Chặn lại rồi căn giữa. */
+
+:root {
+  --rail: 320px;
+  --toi-da: 960px;
+  --song-cao: 92px;
+  --le: 16px;
+}
+
+@media (min-width: 1440px) {
+  :root { --rail: 340px; --toi-da: 1080px; --song-cao: 108px; --le: 18px; }
+}
+
+@media (min-width: 1680px) {
+  :root { --rail: 360px; --toi-da: 1220px; --song-cao: 120px; --le: 20px; }
+}
+
+@media (min-width: 1920px) {
+  :root { --rail: 384px; --toi-da: 1380px; --song-cao: 132px; --le: 24px; }
+  body { font-size: 13.5px; }
+}
+
+@media (min-width: 2400px) {
+  :root { --rail: 420px; --toi-da: 1560px; --song-cao: 150px; --le: 28px; }
+  body { font-size: 14px; }
+}
+
+.than { grid-template-columns: var(--rail) 1fr; }
+.cot { padding: var(--le); }
+.song { height: var(--song-cao); }
+
+/* Khối kết quả căn giữa trong phần đất còn lại của cột phải. */
+#kq {
+  max-width: var(--toi-da);
+  margin: 0 auto;
+}
+
+/* Cửa sổ hẹp — người dùng kéo nhỏ lại hoặc chia đôi màn hình. Xếp dọc để mọi
+   thứ vẫn dùng được, thay vì bóp cột trái đến mức các ô nhập vỡ ra. */
+@media (max-width: 1080px) {
+  body { overflow: auto; }
+  .khung { height: auto; min-height: 100%; }
+  .than {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+  }
+  .cot { overflow: visible; }
+  .thanh-tren { position: sticky; top: 0; z-index: 5; }
+}
+
+/* Nút chạy dính đáy cột trái.
+
+   Vì sao cần: màn laptop cao 768 điểm ảnh không đủ chỗ cho cả cột điều khiển,
+   nên cột đó phải cuộn. Không dính đáy thì nút bấm quan trọng nhất trôi khỏi
+   tầm nhìn, và người dùng phải cuộn xuống mới bấm được — mỗi lần chỉnh một
+   thanh kéo lại phải cuộn một lần. */
+.chan {
+  position: sticky;
+  bottom: calc(var(--le) * -1);
+  background: var(--nen);
+  padding: 10px 0 var(--le);
+  margin-top: 4px;
+}
+
+.chan::before {
+  content: "";
+  display: block;
+  height: 12px;
+  margin: -22px 0 10px;
+  background: linear-gradient(to bottom, transparent, var(--nen));
+}
+
+/* Màn cao thì cho bảng lời/khối kết quả dùng thêm chiều dọc, khỏi cuộn vặt. */
+@media (min-height: 1000px) {
+  :root { --song-cao: 140px; }
+}

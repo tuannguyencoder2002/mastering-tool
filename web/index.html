@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mastering</title>
+<link rel="stylesheet" href="./app.css">
+<link rel="stylesheet" href="./extra.css">
+</head>
+<body>
+<div class="khung">
+
+  <div class="thanh-tren">
+    <span class="cham"></span>
+    <span class="ten">Mastering</span>
+    <span class="day"></span>
+    <span class="the" id="the-gpu">…</span>
+  </div>
+
+  <div class="than">
+
+    <div class="cot">
+      <div class="muc">
+        <p class="nhan">Track</p>
+        <div class="tha" id="tha">
+          <div class="to" id="ten-file">Drop a track</div>
+          <div class="nho" id="thong-tin">mp3 · wav · m4a · flac</div>
+        </div>
+        <input type="file" id="chon-file" accept="audio/*" hidden>
+      </div>
+
+      <div class="muc">
+        <p class="nhan">Mode</p>
+        <div class="doi" id="che-do">
+          <button class="chon" data-mode="full">Vocal + Master</button>
+          <button data-mode="master_only">Master only</button>
+        </div>
+        <p class="ghi" id="ghi-mode">Splits stems, thickens the vocal, remixes, then masters.</p>
+      </div>
+
+      <div class="muc" id="khoi-giong">
+        <p class="nhan">Vocal</p>
+        <label class="keo"><span>Thickness</span><b id="v-thickness">50</b>
+          <input type="range" id="thickness" min="0" max="100" value="50"></label>
+        <label class="keo"><span>Presence</span><b id="v-presence">50</b>
+          <input type="range" id="presence" min="0" max="100" value="50"></label>
+        <label class="keo" title="Reverb. Off by default: the separated stem still carries the reverb from the original production, so anything added here stacks on top of it. Turn it up only if the processed vocal sounds too dry to you."><span>Space</span><b id="v-space">0</b>
+          <input type="range" id="space" min="0" max="100" value="0"></label>
+        <label class="keo"><span>De-ess</span><b id="v-deess">50</b>
+          <input type="range" id="deess" min="0" max="100" value="50"></label>
+        <label class="keo" title="Saturation. Off by default: measured on a released track it costs 1.3-2.6 dB of dynamics and added no measurable width. Whether it sounds warmer is for your ears to decide."><span>Warmth</span><b id="v-warmth">0</b>
+          <input type="range" id="warmth" min="0" max="100" value="0"></label>
+        <label class="keo"><span>Level</span><b id="v-vocal_gain">0 dB</b>
+          <input type="range" id="vocal_gain" min="-6" max="6" step="0.5" value="0"></label>
+      </div>
+
+      <div class="muc">
+        <p class="nhan">Preset</p>
+        <div class="doi" id="preset">
+          <button data-preset="natural">Natural</button>
+          <button class="chon" data-preset="balanced">Balanced</button>
+          <button data-preset="warm">Warm</button>
+          <button data-preset="open">Open</button>
+        </div>
+        <p class="ghi">A starting point, not a destination. Every slider stays yours to move.</p>
+      </div>
+
+      <div class="muc">
+        <p class="nhan">Master</p>
+        <label class="keo"><span>Bass</span><b id="v-bass">0 dB</b>
+          <input type="range" id="bass" min="-4" max="4" step="0.5" value="0"></label>
+        <label class="keo"><span>Air</span><b id="v-air">0 dB</b>
+          <input type="range" id="air" min="-4" max="4" step="0.5" value="0"></label>
+        <label class="keo" title="Stereo width. Above 130 the sides start to cancel on a phone speaker, which sums to mono — the track suddenly sounds hollow on the device most people actually use."><span>Width</span><b id="v-width">100</b>
+          <input type="range" id="width" min="60" max="160" value="100"></label>
+        <div class="doi" id="do-lon">
+          <button data-lufs="-16">−16</button>
+          <button class="chon" data-lufs="-14">−14</button>
+          <button data-lufs="-11">−11</button>
+          <button data-lufs="-9">−9</button>
+        </div>
+        <p class="ghi">Target LUFS. −14 is the streaming standard.</p>
+
+        <div class="tha nho-tha" id="tha-mau">
+          <div class="to" id="ten-mau">Reference track</div>
+          <div class="nho">optional — matches its tone</div>
+        </div>
+        <input type="file" id="chon-mau" accept="audio/*" hidden>
+      </div>
+
+      <div class="chan">
+        <button class="chinh" id="chay" disabled>Process</button>
+        <div class="tien"><i id="thanh-tien"></i></div>
+        <div class="trang-thai" id="trang-thai"></div>
+      </div>
+    </div>
+
+    <div class="cot" id="phai">
+      <div class="trong" id="trong">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M4 14v-4M8 18V6M12 16V8M16 20V4M20 13v-2"/>
+        </svg>
+        <span>No result yet</span>
+      </div>
+
+      <div id="kq" hidden>
+        <div class="so-lieu">
+          <div><b id="sl-lufs">—</b><span id="sl-lufs0">LUFS</span></div>
+          <div title="Dynamic range left. Loudness going up means nothing on its own — read it next to how much dynamics it cost."><b id="sl-dr">—</b><span id="sl-dr0">Dynamics</span></div>
+          <div title="True peak — measured between samples, not just at them. This is the number streaming platforms check, and the one that decides whether the track distorts once encoded to MP3 or AAC."><b id="sl-peak">—</b><span>True peak</span></div>
+          <div><b id="sl-tg">—</b><span>Length</span></div>
+        </div>
+        <p class="canh-bao" id="canh-bao" hidden></p>
+
+        <p class="nhan">A / B</p>
+        <div class="ab" id="ab">
+          <button data-kind="original">Before</button>
+          <button class="chon" data-kind="mastered">After</button>
+          <button data-kind="vocal" id="nut-vocal">Vocal only</button>
+        </div>
+        <p class="ghi">Switching keeps the playhead — the only honest way to compare.</p>
+
+        <canvas class="song" id="song"></canvas>
+        <div class="dieu-khien">
+          <button class="nho" id="phat">Play</button>
+          <span class="gio" id="gio">0:00 / 0:00</span>
+          <span class="day"></span>
+          <label class="o-chon" title="Play both at the same loudness so the louder one does not just sound better">
+            <input type="checkbox" id="cung-muc" checked> Level-matched
+          </label>
+        </div>
+        <div class="dieu-khien meo-hang">
+          <span class="meo">scroll to zoom · drag to pan · space to play · ←→ to step · 1/2/3 to switch A/B · 0 to fit · double-click to reset</span>
+        </div>
+
+        <div class="xuat">
+          <button class="nho" data-fmt="wav">Download WAV</button>
+          <button class="nho" data-fmt="mp3">Download MP3</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+<script src="./app.js"></script>
+</body>
+</html>
