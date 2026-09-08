@@ -5,12 +5,15 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 
-from . import config, jobs, chain
+from . import config, jobs, chain, khoa, tinh
 from . import audio as A
 
 app = FastAPI(title="Mastering")
+
+# Lớp khoá chỉ xuất hiện khi có biến môi trường MASTERING_PASS — tức là khi
+# app được mở ra ngoài mạng. Chạy ở máy mình thì không đổi gì.
+_mat_khau = khoa.gan_neu_can(app)
 
 _ket: dict = {}
 
@@ -110,4 +113,4 @@ def api_health():
 # /api/* không bị lớp file tĩnh nuốt mất.
 _web = config.GOC / "web"
 if _web.exists():
-    app.mount("/", StaticFiles(directory=str(_web), html=True), name="web")
+    app.mount("/", tinh.FileTinh(directory=str(_web), html=True), name="web")

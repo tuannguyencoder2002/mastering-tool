@@ -236,19 +236,34 @@ def vang(x, sr, do_manh=0.25, do_dai=1.6, tre_ms=25.0):
     if do_manh <= 0.01:
         return x
 
+    # Hồi tiếp trễ D mẫu:  y[n] = u[n] + g * y[n-D]
+    #
+    # KHÔNG dùng lfilter với mẫu số dài D+1. Nhìn thì gọn, nhưng lfilter chạy
+    # O(số mẫu × bậc bộ lọc): D ở đây là 1900 mẫu, bài 3 phút là 8,4 triệu mẫu
+    # -> 16 tỉ phép cho MỘT bộ lặp, mà có tới bốn bộ. Đo thật: 35,7 giây chỉ
+    # riêng khối vang, gấp mười lần tất cả các khối khác cộng lại.
+    #
+    # Cách này chia thành từng khối D mẫu. Mẫu thứ n chỉ phụ thuộc mẫu n-D,
+    # nên trong một khối D mẫu không có mẫu nào phụ thuộc mẫu nào — cộng cả
+    # khối một lần bằng numpy. Còn 8,4 triệu / 1900 = 4400 vòng thay vì 16 tỉ.
+    def _hoi_tiep(u, D, g):
+        y = u.copy()
+        n = y.shape[-1]
+        for a in range(D, n, D):
+            b = min(a + D, n)
+            y[:, a:b] += g * y[:, a - D:b - D]
+        return y
+
     def lap(tin, tre_s, suy):
         D = max(1, int(tre_s * sr))
-        a = np.zeros(D + 1, dtype=np.float64)
-        a[0], a[D] = 1.0, -suy
-        return signal.lfilter([1.0], a, tin, axis=-1)
+        return _hoi_tiep(tin.astype(np.float64), D, suy)
 
     def tan_pha(tin, tre_s, g=0.7):
         D = max(1, int(tre_s * sr))
-        b = np.zeros(D + 1, dtype=np.float64)
-        b[0], b[D] = -g, 1.0
-        a = np.zeros(D + 1, dtype=np.float64)
-        a[0], a[D] = 1.0, -g
-        return signal.lfilter(b, a, tin, axis=-1)
+        # Phần truyền thẳng:  u[n] = -g*x[n] + x[n-D]
+        u = -g * tin
+        u[:, D:] += tin[:, :-D]
+        return _hoi_tiep(u, D, g)
 
     # Các độ trễ lệch nhau và không chia hết cho nhau, để hai bộ lặp không cộng
     # hưởng cùng một tần số — trùng cộng hưởng thì nghe ra tiếng kim loại.

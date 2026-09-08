@@ -190,14 +190,20 @@ async function veKetQua(kq) {
   const matDR = kq.before.dr - kq.after.dr;
   const canh = $("canh-bao");
   if (daMaster) {
-    // File vào đã to sẵn thì kéo về đích là ĐI XUỐNG, không phải đi lên.
-    // Viết cứng "gained X dB" thì gặp ca đó ra câu "gained -4.5 dB" — vô nghĩa.
+    // Cả hai chiều đều có thể âm, nên phải chọn động từ theo dấu.
+    //
+    // File vào đã to sẵn thì kéo về đích là ĐI XUỐNG, và dải động thì có bài
+    // còn RỘNG RA. Viết cứng "gained X" / "lost X" là ra những câu vô nghĩa
+    // kiểu "gained -3.1 dB of loudness" và "lost -0.3 dB of dynamics".
     const doiLufs = kq.after.lufs - kq.before.lufs;
+    const cauLufs = (doiLufs >= 0 ? "up " : "down ") + Math.abs(doiLufs).toFixed(1);
+    const cauDR = matDR >= 0
+      ? "lost " + matDR.toFixed(1) + " dB of dynamics"
+      : "gained " + Math.abs(matDR).toFixed(1) + " dB of dynamics back";
     canh.textContent = "This file already looks mastered (" + kq.before.lufs +
-      " LUFS, " + kq.before.dr + " dB dynamics). Loudness went " +
-      (doiLufs >= 0 ? "up " : "down ") + Math.abs(doiLufs).toFixed(1) +
-      " dB and it lost " + matDR.toFixed(1) +
-      " dB of dynamics. Feed a mix, not a master — or use Master only.";
+      " LUFS, " + kq.before.dr + " dB dynamics). Loudness went " + cauLufs +
+      " dB and it " + cauDR +
+      ". Feed a mix, not a master — or use Master only.";
     canh.hidden = false;
   } else if (matDR > 4) {
     canh.textContent = "Lost " + matDR.toFixed(1) +
