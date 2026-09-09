@@ -10,11 +10,184 @@ let dichLufs = -14;
 let soDo = null;      // LUFS trước/sau, để cân mức khi so A/B
 let dinh = {};        // đỉnh sóng theo từng bản, vẽ lại khi đổi A/B
 
-// Ba thẻ audio nạp sẵn, đổi qua lại là nghe ngay. Nếu dùng một thẻ rồi đổi src
-// thì mỗi lần bấm phải chờ tải lại — đúng lúc cần so sánh thì tai đã quên mất
-// bản vừa nghe.
-const ban = { original: null, mastered: null, vocal: null };
 let dangNghe = "mastered";
+
+/* ------------------------------------------------------------------ bộ phát
+ *
+ * Cả ba bản chạy SONG SONG trên MỘT đồng hồ, đổi A/B chỉ là chuyển âm lượng.
+ *
+ * Vì sao không dùng thẻ <audio> nữa: bản trước có ba thẻ, đổi bản là pause thẻ
+ * này rồi play thẻ kia kèm gán currentTime. Gán currentTime là ra lệnh tua,
+ * trình duyệt xả đệm giải mã rồi nạp lại — hụt tiếng chừng một nhịp. Và cắt
+ * tiếng giữa chu kỳ sóng thì biên độ nhảy đột ngột về 0, nghe thành tiếng
+ * "tách". Cái cần so là hai bản khác nhau ở đâu, mà mỗi lần bấm lại chen vào
+ * một khoảng lặng và một tiếng tách — hai thứ to hơn chính khác biệt cần nghe.
+ *
+ * Bản này giải mã sẵn cả ba vào bộ nhớ, phát cùng lúc, mỗi bản qua một núm âm
+ * lượng riêng. Đổi bản = hạ núm này, nâng núm kia trong 20 ms. Không tua,
+ * không nạp lại, và ba bản khớp nhau tới từng mẫu vì cùng một đồng hồ — nên so
+ * A/B là so ĐÚNG một khoảnh khắc trong bài.
+ *
+ * Giá phải trả là bộ nhớ: bài 4 phút, ba bản, 48 kHz nổi 32 bit ≈ 280 MB. Đổi
+ * được: đằng nào cũng phải giải mã cả ba để vẽ sóng, giờ chỉ là giữ lại thay
+ * vì bỏ đi.
+ */
+const may = (() => {
+  let ctx = null;
+  const dem = {};            // AudioBuffer từng bản
+  const num = {};            // GainNode từng bản
+  let nguon = {};            // BufferSource đang chạy
+  let chay = false;
+  let t0 = 0;                // ctx.currentTime lúc bấm phát
+  let viTri = 0;             // mốc trong bài lúc bấm phát
+  const he = {};             // hệ số cân mức từng bản
+  let khiDoi = null;         // gọi lại khi phát/dừng, để đổi chữ trên nút
+
+  // 20 ms: đủ dài để không nghe ra tiếng tách, đủ ngắn để tai coi là tức thì.
+  const REO = 0.02;
+
+  function may_ctx() {
+    if (!ctx) {
+      const C = window.AudioContext || window.webkitAudioContext;
+      // Tạo được ngay mà không cần người dùng bấm gì; nó ở trạng thái treo và
+      // decodeAudioData vẫn chạy. Chỉ resume() mới cần một cú bấm.
+      ctx = new C();
+    }
+    return ctx;
+  }
+
+  function dat(k, gt, tuc_thi) {
+    if (!num[k]) return;
+    const g = num[k].gain;
+    const t = ctx.currentTime;
+    g.cancelScheduledValues(t);
+    if (tuc_thi) { g.value = gt; return; }
+    g.setValueAtTime(g.value, t);
+    // Chuyển thẳng (linear) chứ không theo công suất: hai bản là cùng một bản
+    // nhạc nên chúng cộng vào nhau, dùng đường công suất là giữa lúc chuyển bị
+    // vồng lên chừng 3 dB.
+    g.linearRampToValueAtTime(gt, t + REO);
+  }
+
+  /** Cho một bản vào giữa lúc đang phát, khớp đúng mốc của những bản kia.
+   *
+   *  Bắt đầu ở mốc `ts` với đoạn `off` thì tới thời điểm T nó đang ở
+   *  off + (T - ts); cần bằng viTri + (T - t0), nên off = viTri + (ts - t0).
+   */
+  function _nhapLan(k) {
+    if (nguon[k] || !dem[k]) return;
+    const ts = ctx.currentTime + 0.02;
+    const off = viTri + (ts - t0);
+    if (off >= dem[k].duration - 0.01) return;
+    const src = ctx.createBufferSource();
+    src.buffer = dem[k];
+    src.connect(num[k]);
+    src.start(ts, off);
+    nguon[k] = src;
+  }
+
+  function _ngat() {
+    Object.values(nguon).forEach((x) => { try { x.stop(); } catch (_) {} });
+    nguon = {};
+    chay = false;
+  }
+
+  return {
+    /** Giải mã trên ĐÚNG cái ctx sẽ phát. Giải mã ở ctx khác thì tần số lấy
+     *  mẫu có thể lệch, và ba bản lệch tần số là hết khớp nhau. */
+    giaiMa(buf) { return may_ctx().decodeAudioData(buf); },
+
+    /** Giữ lại bản đã giải mã. Gọi từ docDinh(), chỗ đằng nào cũng phải giải mã. */
+    nap(k, buf) {
+      const c = may_ctx();
+      dem[k] = buf;
+      if (!num[k]) {
+        num[k] = c.createGain();
+        num[k].connect(c.destination);
+      }
+      if (he[k] === undefined) he[k] = 1;
+      num[k].gain.value = (k === dangNghe) ? he[k] : 0;
+      // Bản này giải mã xong SAU khi đã bấm Play thì nó chưa có nguồn nào
+      // chạy — đổi sang là im tiếng. Cho nó nhập làn ngay, khớp đúng mốc mà
+      // hai bản kia đang ở.
+      if (chay) _nhapLan(k);
+    },
+
+    xoa() {
+      _ngat();
+      Object.keys(dem).forEach((k) => delete dem[k]);
+      viTri = 0;
+    },
+
+    co(k) { return !!dem[k || dangNghe]; },
+    // Chỉ để phép thử soi được: bản này có nguồn đang chạy hay không.
+    _chan(k) { return !!nguon[k]; },
+    dai() { return dem[dangNghe] ? dem[dangNghe].duration : 0; },
+    dangPhat() { return chay; },
+    gio() {
+      if (!chay) return viTri;
+      return Math.max(0, Math.min(this.dai(), viTri + (ctx.currentTime - t0)));
+    },
+
+    khiDoiTrangThai(f) { khiDoi = f; },
+
+    phat() {
+      if (chay || !dem[dangNghe]) return;
+      const c = may_ctx();
+      if (c.state === "suspended") c.resume();
+      if (viTri >= this.dai() - 0.01) viTri = 0;
+      // Lùi 30 ms rồi mới bắt đầu: đủ để cả ba nguồn được xếp lịch trước khi
+      // đồng hồ chạy tới, nhờ vậy chúng vào cùng một mốc chứ không lệch nhau
+      // vài mẫu theo thứ tự khởi tạo.
+      const t = c.currentTime + 0.03;
+      Object.keys(dem).forEach((k) => {
+        const src = c.createBufferSource();
+        src.buffer = dem[k];
+        src.connect(num[k]);
+        src.start(t, Math.min(viTri, dem[k].duration - 0.01));
+        nguon[k] = src;
+      });
+      t0 = t;
+      chay = true;
+      if (khiDoi) khiDoi(true);
+    },
+
+    dung() {
+      if (!chay) return;
+      viTri = this.gio();
+      _ngat();
+      if (khiDoi) khiDoi(false);
+    },
+
+    batTat() { chay ? this.dung() : this.phat(); },
+
+    /** Tua CẢ BA bản. So A/B ở hai mốc khác nhau thì vô nghĩa. */
+    datGio(t) {
+      const dp = chay;
+      viTri = Math.max(0, Math.min(this.dai(), t || 0));
+      if (dp) { _ngat(); this.phat(); }
+    },
+
+    doiBan(k) {
+      if (!dem[k] || k === dangNghe) return;
+      may_ctx();
+      const cu = dangNghe;
+      dangNghe = k;
+      dat(cu, 0);
+      dat(k, he[k]);
+    },
+
+    /** Hạ bản to xuống cho bằng bản nhỏ, hoặc thả về nguyên mức. */
+    canMuc(bat, lech) {
+      const hs = Math.pow(10, -Math.abs(lech) / 20);
+      he.original = bat && lech < 0 ? hs : 1;
+      he.mastered = bat && lech > 0 ? hs : 1;
+      he.vocal = 1;
+      if (!ctx) return;
+      Object.keys(dem).forEach((k) => dat(k, k === dangNghe ? he[k] : 0));
+    },
+  };
+})();
 
 function gio(t) {
   if (!isFinite(t)) return "0:00";
@@ -25,8 +198,6 @@ function gio(t) {
 function gioLe(t) {
   return gio(t) + "." + String(Math.floor((t % 1) * 100)).padStart(2, "0");
 }
-
-function hienTai() { return ban[dangNghe]; }
 
 // ------------------------------------------------------------------ chọn file
 
@@ -261,17 +432,8 @@ async function veKetQua(kq) {
 
   $("nut-vocal").disabled = !kq.has_vocal;
 
-  Object.keys(ban).forEach((k) => {
-    if (ban[k]) ban[k].pause();
-    ban[k] = null;
-  });
+  may.xoa();
   dinh = {};
-
-  ["original", "mastered"].concat(kq.has_vocal ? ["vocal"] : []).forEach((k) => {
-    const a = new Audio("/api/audio/" + maViec + "?kind=" + k);
-    a.preload = "auto";
-    ban[k] = a;
-  });
 
   // Bài mới thì trả cửa sổ xem về cả bài. Giữ mức phóng của lần trước là
   // người dùng xử lý bài mới xong thấy một khúc giữa, không hiểu vì sao.
@@ -280,11 +442,15 @@ async function veKetQua(kq) {
 
   dangNghe = "mastered";
   danhDauAB();
-  canMuc();
-  noiSuKien();
 
+  // Nạp bản đang nghe trước rồi mới tới bản gốc: bấm Play được ngay, không
+  // phải chờ giải mã xong cả hai.
   await docDinh("mastered");
+  canMuc();
+  veSong();
   await docDinh("original");
+  if (kq.has_vocal) await docDinh("vocal");
+  canMuc();
   veSong();
 }
 
@@ -296,12 +462,8 @@ function canMuc() {
   // So A/B mà một bản to hơn thì bản to hơn LUÔN nghe hay hơn, bất kể nó có
   // thật sự tốt hơn không — đó là bẫy tâm lý âm thanh kinh điển. Hạ bản to
   // xuống cho bằng bản nhỏ rồi hãy so.
-  const bat = $("cung-muc").checked;
-  const lech = soDo ? soDo.after.lufs - soDo.before.lufs : 0;
-  const hs = Math.pow(10, -Math.abs(lech) / 20);
-  if (ban.original) ban.original.volume = bat && lech < 0 ? hs : 1;
-  if (ban.mastered) ban.mastered.volume = bat && lech > 0 ? hs : 1;
-  if (ban.vocal) ban.vocal.volume = 1;
+  may.canMuc($("cung-muc").checked,
+             soDo ? soDo.after.lufs - soDo.before.lufs : 0);
 }
 
 $("cung-muc").onchange = canMuc;
@@ -309,44 +471,39 @@ $("cung-muc").onchange = canMuc;
 /** Đổi bản đang nghe. Tách thành hàm riêng để phím 1/2/3 gọi được — tai chỉ
  *  nhớ âm thanh vừa nghe trong vài giây, rê chuột lên bấm nút là đã quá muộn. */
 function doiBan(k) {
-  if (!k || !ban[k]) return;
+  if (!k || !may.co(k)) return;
   const nut = $("ab").querySelector('[data-kind="' + k + '"]');
   if (nut && nut.disabled) return;
 
-  const cu = hienTai();
-  const t = cu ? cu.currentTime : 0;
-  const dangPhat = cu && !cu.paused;
-  if (cu) cu.pause();
-
-  dangNghe = k;
+  // Không dừng, không tua, không nạp lại — chỉ chuyển âm lượng. Vị trí kim tự
+  // giữ nguyên vì cả ba bản vẫn đang chạy cùng nhau.
+  may.doiBan(k);
   danhDauAB();
-  const moi = hienTai();
-  // Giữ nguyên vị trí kim: đổi bản mà nhảy về đầu bài thì không so được gì cả.
-  try { moi.currentTime = t; } catch (_) {}
-  if (dangPhat) moi.play();
   veSong();
   if (!dinh[k]) docDinh(k).then(veSong);
 }
 
 $("ab").onclick = (e) => doiBan(e.target.dataset.kind);
 
-$("phat").onclick = () => {
-  const a = hienTai();
-  if (!a) return;
-  a.paused ? a.play() : a.pause();
-};
+$("phat").onclick = () => may.batTat();
 
-function noiSuKien() {
-  Object.entries(ban).forEach(([k, a]) => {
-    if (!a) return;
-    a.onplay = () => ($("phat").textContent = "Pause");
-    a.onpause = () => ($("phat").textContent = "Play");
-    a.ontimeupdate = () => {
-      if (k !== dangNghe) return;
-      $("gio").textContent = gio(a.currentTime) + " / " + gio(a.duration || 0);
-      veSong();
-    };
-  });
+may.khiDoiTrangThai((dang) => {
+  $("phat").textContent = dang ? "Pause" : "Play";
+  if (dang) nhip();
+});
+
+/** Nhịp vẽ lại lúc đang phát.
+ *
+ *  Bản trước dựa vào sự kiện `timeupdate` của thẻ audio, mà sự kiện đó chỉ nổ
+ *  chừng 4 lần một giây — vạch phát nhảy từng bậc nhìn rõ. Đây bám theo nhịp
+ *  vẽ của màn hình, và tự tắt khi dừng nên không tốn gì lúc ngồi im.
+ */
+function nhip() {
+  if (!may.dangPhat()) return;
+  $("gio").textContent = gio(may.gio()) + " / " + gio(may.dai());
+  veSong();
+  if (may.gio() >= may.dai() - 0.02) { may.dung(); return; }
+  requestAnimationFrame(nhip);
 }
 
 // ------------------------------------------------------------------ sóng
@@ -365,8 +522,8 @@ const MS_MOI_COT = 10;
 async function docDinh(kind) {
   try {
     const buf = await (await fetch("/api/audio/" + maViec + "?kind=" + kind)).arrayBuffer();
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const dl = await ctx.decodeAudioData(buf);
+    const dl = await may.giaiMa(buf);
+    may.nap(kind, dl);
     const x = dl.getChannelData(0);
     const buoc = Math.max(1, Math.round(dl.sampleRate * MS_MOI_COT / 1000));
     const cot = Math.floor(x.length / buoc);
@@ -383,13 +540,11 @@ async function docDinh(kind) {
       d[i] = m;
     }
     dinh[kind] = d;
-    ctx.close();
   } catch (e) { /* trình duyệt không giải mã được thì bỏ sóng, app vẫn chạy */ }
 }
 
 function tongDai() {
-  const a = hienTai();
-  return (a && a.duration) || (soDo && soDo.duration) || 1;
+  return may.dai() || (soDo && soDo.duration) || 1;
 }
 
 function chuanCuaSo() {
@@ -484,8 +639,7 @@ function veSong() {
   }
 
   // Vạch phát, kèm tay nắm hình thang ở đỉnh cho thấy nó cầm được.
-  const a = hienTai();
-  const t = (a && a.currentTime) || 0;
+  const t = may.gio();
   if (t >= xemDau - 1 && t <= xemDau + xemDai + 1) {
     const px = x(t);
     g.fillStyle = "#ffffff";
@@ -533,13 +687,12 @@ function veSong() {
 
   c.addEventListener("pointerdown", (e) => {
     if ($("kq").hidden) return;
-    const a = hienTai();
-    if (!a) return;
+    if (!may.co()) return;
     const r = c.getBoundingClientRect();
     const px = e.clientX - r.left;
     const py = e.clientY - r.top;
     const t = xemDau + (px / r.width) * xemDai;
-    const px_vach = ((a.currentTime - xemDau) / xemDai) * r.width;
+    const px_vach = ((may.gio() - xemDau) / xemDai) * r.width;
 
     // Ba tầng, phân theo chỗ bấm — không có chế độ nào phải bật tắt:
     //   thước ở trên   -> tua
@@ -578,8 +731,7 @@ function veSong() {
     if (!keo.tua && !keo.da_di) {
       const r = c.getBoundingClientRect();
       datGio(xemDau + ((e.clientX - r.left) / r.width) * xemDai);
-      const a = hienTai();
-      if (a) a.play();
+      may.phat();
     }
     keo = null;
   });
@@ -593,16 +745,9 @@ function veSong() {
   });
 })();
 
-/** Đặt mốc phát cho CẢ BA bản cùng lúc.
- *
- *  Đây là chỗ Mastering khác Lyric Sync: có ba thẻ audio nạp sẵn để đổi A/B
- *  cho tức thì. Chỉ tua bản đang nghe thì bấm sang bản kia là nó vẫn đứng ở
- *  chỗ cũ — mà so A/B ở hai mốc thời gian khác nhau thì vô nghĩa. */
+/** Tua. Cả ba bản đi cùng nhau vì chúng dùng chung một đồng hồ. */
 function datGio(t) {
-  Object.values(ban).forEach((a) => {
-    if (!a) return;
-    try { a.currentTime = t; } catch (_) {}
-  });
+  may.datGio(t);
 }
 
 // ------------------------------------------------------------- phím tắt
@@ -620,23 +765,22 @@ window.addEventListener("keydown", (e) => {
   // thì thay vì nhích thanh kéo, nhạc lại tua đi một giây.
   if (dangGo(e) || e.ctrlKey || e.altKey || e.metaKey) return;
   if ($("kq").hidden) return;
-  const a = hienTai();
-  if (!a) return;
+  if (!may.co()) return;
 
   const buoc = e.shiftKey ? 5 : 1;
   switch (e.key) {
     case " ":
       e.preventDefault();          // dấu cách vốn cuộn trang xuống một màn
-      a.paused ? a.play() : a.pause();
+      may.batTat();
       break;
     case "ArrowLeft":
       e.preventDefault();
-      datGio(Math.max(0, a.currentTime - buoc));
+      datGio(Math.max(0, may.gio() - buoc));
       veSong();
       break;
     case "ArrowRight":
       e.preventDefault();
-      datGio(Math.min(tongDai(), a.currentTime + buoc));
+      datGio(Math.min(tongDai(), may.gio() + buoc));
       veSong();
       break;
     case "+": case "=":
