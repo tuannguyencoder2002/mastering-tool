@@ -203,23 +203,62 @@ chiếu. Kéo cán cân tổng về **không** làm mất phần giọng nổi l
 và sáng hơn nhạc nền đúng như khối giọng đã làm; cái bị kéo về là độ sáng của
 cả bản nhạc.
 
+## Máy nén tổng: "rất nhẹ" hoá ra là khối nặng tay nhất
+
+Ghi chú cũ ở khối này viết *"nén tổng rất nhẹ, chỉ để các nhạc cụ dính vào
+nhau"*. Đo từng khối trên năm bài mới thấy sai hẳn:
+
+| Khối | Lấy đi |
+|---|---|
+| cân phổ | **+0,37 dB** (thêm vào) |
+| **nén tổng** | **−2,39 dB** |
+| chuẩn độ lớn, gồm hạn đỉnh | −0,19 dB |
+
+Trước đó tôi đổ cho bộ hạn đỉnh và trần −1 dBTP, còn định đề nghị nới trần lên
+0 dBTP cho giống MasteringBox. Số đo bác bỏ: bộ hạn đỉnh gần như vô can. Nhờ
+vậy giữ được trần −1 dBTP đúng chuẩn mà vẫn chữa được dải động.
+
+Tỉ lệ nén dò bằng cách chạy cả năm bài qua dây chuyền thật ở nhiều mức, lấy
+mức nào cho dải động sát bản MasteringBox nhất:
+
+| Chế độ | Cũ | Mới | Lệch dải động |
+|---|---|---|---|
+| Master only | 1,8 | **1,40** | 0,62 → **0,38 dB** |
+| Vocal + Master | 1,8 | **1,20** | 1,01 → **0,27 dB** |
+
+Chế độ đầy đủ cần nén **nhẹ hơn**, nghe ngược đời nhưng có lý: khối giọng nâng
+giọng lên so với nhạc nền nên bản phối tới đây dải động rộng hơn hẳn (đo trên
+một bài: 9,96 → 12,64 dB), cùng một tỉ lệ thì nó bị bóp mạnh hơn.
+
 ### Kết quả, năm cặp trước/sau của khách
 
-Lệch phổ trung bình so với bản MasteringBox, dải 50 Hz - 16 kHz:
-
-| | Lệch |
+| | Lệch cân bằng phổ |
 |---|---|
 | bản mix gốc, chưa xử lý | 1,04 dB |
 | tool bản cũ | 1,23 dB |
-| **tool mới, Master only** | **0,39 dB** (xấu nhất 0,60) |
-| **tool mới, Vocal + Master** | **0,48 dB** (xấu nhất 0,74) |
+| **tool mới, Master only** | **0,40 dB** |
+| **tool mới, Vocal + Master** | **0,47 dB** (xấu nhất 0,65) |
 
-Độ to lệch 0,43-0,45 dB, dải động lệch 0,62-1,01 dB, đỉnh liên mẫu −0,98 dBTP.
+So theo phân bố năm bài:
 
-Một chỗ **cố ý không đuổi theo**: bốn trong năm bản MasteringBox vượt 0 dBTP
-(+0,14 đến +0,60). Tool chặn ở −1 dBTP theo chuẩn phát hành, nên riêng chỗ đó
-thua chừng 1,5 dB độ to. File vượt 0 dBTP sẽ bị nền tảng hạ xuống và méo trên
-một số bộ giải mã — đó là cái giá đáng trả.
+| | MasteringBox | Tool |
+|---|---|---|
+| Độ to | −10,16 ± 0,53 LUFS | −10,22 ± 0,05 |
+| Dải động | 6,95 ± 1,02 dB | 6,97 ± 1,28 |
+| Đỉnh liên mẫu | +0,46 ± 0,19 dBTP | −1,02 ± 0,06 |
+
+Độ to và dải động trung bình lệch **0,06 và 0,02 dB** — coi như trùng. Riêng độ
+to, tool còn đều tay hơn họ mười lần (±0,05 so với ±0,53), vì họ đẩy tới trần
+đỉnh rồi LUFS rơi đâu thì rơi, còn tool nhắm thẳng vào đích.
+
+## Trần đỉnh: chỗ cố ý không giống họ
+
+Bốn trong năm bản MasteringBox vượt 0 dBTP (+0,14 đến +0,60). Tool chặn ở
+**−1 dBTP** và giữ nguyên như vậy, vì đó là mức của EBU R128, Apple "Mastered
+for iTunes" và khuyến nghị AES; Spotify còn khuyên −2 dBTP với bản to hơn
+−14 LUFS. File vượt 0 dBTP sau khi mã hoá sang AAC đội lên hơn +1,0 dBTP và
+méo nghe được — đây là chỗ bản của họ sai, không phải mình. Cái giá là thua
+chừng 1,5 dB nếu đo độ to bằng đỉnh.
 
 Cảnh báo thật: đặt −9 rồi phát lên Spotify thì nền tảng **hạ xuống −14**, và cái
 còn lại là một bản đã bị nén mất dải động — nghe **bẹt hơn** chính bản −14. To

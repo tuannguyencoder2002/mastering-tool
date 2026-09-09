@@ -28,6 +28,21 @@ from .separate import tach_giong
 # quen -10 thì họ nghe thành yếu, dù về chuẩn là đúng.
 DICH_TU_DONG = -10.2
 
+# (tỉ lệ nén, độ gối) của máy nén tổng, đặt riêng cho từng chế độ.
+#
+# Cả hai đều DÒ ĐƯỢC chứ không chọn tay: chạy năm bản mix của khách qua dây
+# chuyền thật ở nhiều tỉ lệ, rồi lấy tỉ lệ nào cho dải động sát bản MasteringBox
+# nhất. Mức cũ 1,8 cho cả hai làm bản ra chặt hơn họ 0,62 dB (master-only) và
+# 1,01 dB (đầy đủ), đều một chiều ở cả năm bài.
+#
+#   master_only  1,40 -> lệch 0,38 dB
+#   full         1,20 -> lệch 0,27 dB
+#
+# Vì sao chế độ đầy đủ cần nén NHẸ HƠN: khối giọng nâng giọng lên so với nhạc
+# nền, nên bản phối tới đây dải động rộng hơn hẳn (đo trên một bài: 9,96 ->
+# 12,64 dB). Cùng một tỉ lệ nén thì nó bị bóp nhiều hơn.
+NEN_TONG = {"master_only": (1.40, 8.0), "full": (1.20, 8.0)}
+
 
 def _bao(f, p, m):
     if f:
@@ -105,7 +120,8 @@ def day_giong(v, sr, day=0.5, sang=0.5, khong_gian=0.0, khu_xit=0.5, am=0.0):
 
 
 def master(x, sr, dich_lufs=-14.0, bai_mau: Optional[Path] = None, bao=None,
-           tram=0.0, cao=0.0, rong=1.0, do_manh_pho=1.0, duong_pho=None):
+           tram=0.0, cao=0.0, rong=1.0, do_manh_pho=1.0, duong_pho=None,
+           tran_db=-1.0, nen_ti_le=1.8, nen_goc=8.0):
     """Khâu cuối: cân phổ tổng, gắn kết bản phối, đưa về độ lớn đích.
 
     Có bài mẫu thì dùng matchering — nó đo phổ tần và độ lớn của bài mẫu rồi
@@ -140,13 +156,18 @@ def master(x, sr, dich_lufs=-14.0, bai_mau: Optional[Path] = None, bao=None,
     if cao:
         y = dsp.eq(y, sr, "highshelf", 9000.0, cao)
     y = dsp.be_rong(y, rong)
-    # Nén tổng rất nhẹ, chỉ để các nhạc cụ "dính" vào nhau.
-    y = dsp.nen(y, sr, nguong_db=-18.0, ti_le=1.8, nhanh_ms=30.0, cham_ms=200.0,
-                goc_db=8.0, bu_db=1.0)
+    # Nén tổng: khối "gắn kết" cho các nhạc cụ dính vào nhau.
+    #
+    # Ghi chú cũ ở đây viết "rất nhẹ". Sai. Đo trên năm bài: khối này một mình
+    # lấy đi 2,39 dB dải động, trong khi cả khâu chuẩn độ lớn (gồm hạn đỉnh)
+    # chỉ lấy 0,19 dB. Tôi từng đổ cho bộ hạn đỉnh và trần -1 dBTP; số đo bác
+    # bỏ điều đó.
+    y = dsp.nen(y, sr, nguong_db=-18.0, ti_le=nen_ti_le, nhanh_ms=30.0,
+                cham_ms=200.0, goc_db=nen_goc, bu_db=1.0)
     _bao(bao, 0.7, "Loudness")
     if dich_lufs is None:
-        return dsp.han_dinh(y, sr, tran_db=-1.0)
-    return dsp.chuan_do_lon(y, sr, dich_lufs=dich_lufs, tran_db=-1.0)
+        return dsp.han_dinh(y, sr, tran_db=tran_db)
+    return dsp.chuan_do_lon(y, sr, dich_lufs=dich_lufs, tran_db=tran_db)
 
 
 def _master_theo_mau(x, sr, bai_mau: Path, dich_lufs, tram=0.0, cao=0.0, rong=1.0):
@@ -208,6 +229,14 @@ def xu_ly(duong_dan: Path, tuy_chon: dict, bao: Optional[Callable] = None) -> di
     # Cân phổ mạnh tay bao nhiêu. 1.0 = đúng đường cong đo được. Có nút riêng
     # để ai muốn nhẹ hơn thì hạ, chứ không khoá cứng.
     do_manh_pho = float(tuy_chon.get("tone", 100)) / 100.0
+    # Trần đỉnh liên mẫu. -1 dBTP là mức an toàn của chuẩn phát hành; nới lên
+    # gần 0 cho thêm headroom để bộ hạn đỉnh đỡ phải bóp, đổi lại rủi ro méo
+    # trên vài bộ giải mã. Xem README, mục trần đỉnh.
+    tran = float(tuy_chon.get("ceiling", -1.0))
+    # Tham số nén tổng, đặt riêng cho từng chế độ vì tín hiệu vào khác nhau:
+    # chế độ đầy đủ đã qua khối giọng nên dải động trước khi vào đây rộng hơn.
+    nen = tuy_chon.get("nen") or NEN_TONG[
+        "full" if che_do == "full" else "master_only"]
 
     # Nâng/hạ mức TRƯỚC khi vào dây chuyền. Chế độ album cần cái này: mọi máy
     # nén ở đây đều có ngưỡng cố định, nên bài vào nhỏ hơn thì bị nén ít hơn mà
@@ -256,13 +285,15 @@ def xu_ly(duong_dan: Path, tuy_chon: dict, bao: Optional[Callable] = None) -> di
         ra = master(tron, sr, dich_lufs=dich, bai_mau=bai_mau,
                     bao=lambda p, m2: _bao(bao, 0.75 + 0.2 * p, m2),
                     tram=tram, cao=cao, rong=rong, do_manh_pho=do_manh_pho,
-                    duong_pho=dsp.DO_NGHIENG_GIONG)
+                    duong_pho=dsp.DO_NGHIENG_GIONG, tran_db=tran,
+                    nen_ti_le=nen[0], nen_goc=nen[1])
     else:
         _bao(bao, 0.3, "Mastering")
         ra = master((goc * he_so_truoc).astype(np.float32),
                     sr, dich_lufs=dich, bai_mau=bai_mau,
                     bao=lambda p, m2: _bao(bao, 0.3 + 0.6 * p, m2),
-                    tram=tram, cao=cao, rong=rong, do_manh_pho=do_manh_pho)
+                    tram=tram, cao=cao, rong=rong, do_manh_pho=do_manh_pho,
+                    tran_db=tran, nen_ti_le=nen[0], nen_goc=nen[1])
 
     f_wav = thu_muc / "mastered.wav"
     f_mp3 = thu_muc / "mastered.mp3"
