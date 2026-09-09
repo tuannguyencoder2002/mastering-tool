@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
-from . import config, jobs, chain, khoa, tinh
+from . import config, jobs, chain, khoa, tai_len, tinh
 from . import audio as A
 
 app = FastAPI(title="Mastering")
@@ -18,9 +18,28 @@ _mat_khau = khoa.gan_neu_can(app)
 _ket: dict = {}
 
 
+@app.post("/api/upload")
+async def api_upload(
+    file: UploadFile = File(...),
+    ma: str = Form(""),
+    chi_so: int = Form(0),
+    tong: int = Form(1),
+    ten: str = Form("audio"),
+):
+    """Nhận một phần của file.
+
+    Đường hầm Cloudflare gói miễn phí cắt request sau 100 giây, nên file lớn
+    gửi một lượt là bị cắt giữa đường. Chia phần thì mỗi request chỉ vài giây.
+    """
+    return tai_len.nhan_khoi(config.UPLOAD, ma, chi_so, tong, ten,
+                             await file.read())
+
+
 @app.post("/api/master")
 async def api_master(
-    audio: UploadFile = File(...),
+    audio_ma: str = Form(""),
+    reference_ma: str = Form(""),
+    audio: UploadFile = File(None),
     reference: UploadFile = File(None),
     mode: str = Form("full"),
     thickness: float = Form(50),
@@ -35,15 +54,12 @@ async def api_master(
     lufs: float = Form(-14),
 ):
     ma = jobs.tao()
-    dich = config.UPLOAD / f"{ma}_{Path(audio.filename or 'audio').name}"
-    with open(dich, "wb") as f:
-        shutil.copyfileobj(audio.file, f)
+    dich = await tai_len.lay_file(config.UPLOAD, audio_ma, audio, ma)
 
     f_mau = None
-    if reference is not None and reference.filename:
-        f_mau = config.REF / f"{ma}_{Path(reference.filename).name}"
-        with open(f_mau, "wb") as f:
-            shutil.copyfileobj(reference.file, f)
+    if reference_ma or (reference is not None and reference.filename):
+        f_mau = await tai_len.lay_file(config.REF, reference_ma, reference,
+                                       ma + "_mau")
 
     tuy_chon = {"mode": mode, "thickness": thickness, "presence": presence,
                 "space": space, "deess": deess, "warmth": warmth,
