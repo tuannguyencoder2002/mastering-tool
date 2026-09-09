@@ -39,6 +39,21 @@
         <p class="ghi" id="ghi-mode">Splits stems, thickens the vocal, remixes, then masters.</p>
       </div>
 
+      <div class="muc">
+        <p class="nhan">Target</p>
+        <label class="o-chon tu-dong" title="Measures the track, then picks the loudness target and the push for that track. Five reference masters landed between -9.6 and -10.9 LUFS, needing +2.1 to +5.3 dB each — one fixed amount cannot fit them all.">
+          <input type="checkbox" id="tu-dong" checked> Auto target
+        </label>
+        <div class="doi" id="do-lon">
+          <button data-lufs="-16">−16</button>
+          <button class="chon" data-lufs="-14">−14</button>
+          <button data-lufs="-11">−11</button>
+          <button data-lufs="-9">−9</button>
+        </div>
+        <p class="ghi" id="ghi-lufs">Auto aims at −10.2 LUFS, measured from your
+        reference masters. Untick to set the target yourself.</p>
+      </div>
+
       <div class="muc" id="khoi-giong">
         <p class="nhan">Vocal</p>
         <label class="keo"><span>Thickness</span><b id="v-thickness">50</b>
@@ -74,13 +89,9 @@
           <input type="range" id="air" min="-4" max="4" step="0.5" value="0"></label>
         <label class="keo" title="Stereo width. Above 130 the sides start to cancel on a phone speaker, which sums to mono — the track suddenly sounds hollow on the device most people actually use."><span>Width</span><b id="v-width">100</b>
           <input type="range" id="width" min="60" max="160" value="100"></label>
-        <div class="doi" id="do-lon">
-          <button data-lufs="-16">−16</button>
-          <button class="chon" data-lufs="-14">−14</button>
-          <button data-lufs="-11">−11</button>
-          <button data-lufs="-9">−9</button>
-        </div>
-        <p class="ghi">Target LUFS. −14 is the streaming standard.</p>
+        <label class="keo" title="How much of the measured tone curve to apply. 100 is the full curve taken from five reference masters."><span>Tone match</span><b id="v-tone">100</b>
+          <input type="range" id="tone" min="0" max="100" value="100"></label>
+
 
         <div class="tha nho-tha" id="tha-mau">
           <div class="to" id="ten-mau">Reference track</div>
@@ -111,6 +122,7 @@
           <div title="True peak — measured between samples, not just at them. This is the number streaming platforms check, and the one that decides whether the track distorts once encoded to MP3 or AAC."><b id="sl-peak">—</b><span>True peak</span></div>
           <div><b id="sl-tg">—</b><span>Length</span></div>
         </div>
+        <p class="tu-chon" id="tu-chon" hidden></p>
         <p class="canh-bao" id="canh-bao" hidden></p>
 
         <p class="nhan">A / B</p>

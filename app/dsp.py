@@ -255,6 +255,163 @@ def nhan_doi(x, sr, do_manh=0.5, tre_ms=None):
     return ra.astype(np.float32)
 
 
+# ------------------------------------------------- cân phổ theo đường cong đo
+
+# Đường cong hiệu chỉnh: khâu master của ta lệch khỏi MasteringBox bao nhiêu
+# ở từng dải, lấy ngược dấu. ĐO ĐƯỢC, không phải chọn cho hay.
+#
+# Cách đo, và vì sao phải làm đúng cách này: chạy chế độ master-only với đường
+# cong TẮT trên năm bản mix mà khách đã gửi kèm bản MasteringBox tương ứng, rồi
+# so phổ 1/3 octave (chuẩn về 1 kHz) của hai bên.
+#
+# Lần đầu tôi làm sai: lấy "bản master trừ bản mix" của MasteringBox rồi áp
+# thẳng vào. Nghe có lý, nhưng dây chuyền của ta KHÔNG trung tính — chế độ
+# Vocal+Master đã làm sáng bản phối trước khi tới khâu master (khối giọng cộng
+# +2,5 dB ở 3,2 kHz và +3 dB ở 11 kHz), nên cộng thêm đường cong nữa là đếm
+# hai lần. Số đo phán ngay: lệch phổ xấu đi từ 1,23 lên 1,42 dB. Phải đo sai
+# lệch của CHÍNH ĐẦU RA của ta, không phải sai lệch của đầu vào.
+#
+# Vì sao chọn master-only để căn: cùng đầu vào, cùng công việc, không có khối
+# giọng chen vào giữa — so ngang bằng được với MasteringBox. Chế độ
+# Vocal+Master cố ý làm giọng dày và sáng hơn, nên nó không cần khớp tuyệt đối.
+#
+# Vì sao áp một đường cong chung thay vì ép từng bài về một dáng phổ đích: đo
+# độ lệch chuẩn giữa năm bài trước và sau khi qua MasteringBox, được 2,50 dB ->
+# 2,33 dB. Tức nó gần như KHÔNG kéo các bài về cùng một dáng; nó áp một độ
+# nghiêng na ná nhau và để mỗi bản mix giữ tính cách riêng.
+#
+# Dưới 40 Hz số đo tản rất mạnh (lệch chuẩn giữa năm bài tới 3,2 dB), nên phần
+# đó bị chặn ở +0,8 dB. Nâng dải hạ âm là cách nhanh nhất để ăn hết headroom mà
+# không ai nghe thấy gì.
+DO_NGHIENG = [
+    (20.0, 0.00),
+    (25.0, 0.80),
+    (31.5, 0.80),
+    (40.0, 1.17),
+    (50.0, 1.17),
+    (63.0, 1.23),
+    (80.0, 1.13),
+    (100.0, 0.66),
+    (125.0, -0.01),
+    (160.0, -0.30),
+    (200.0, -0.26),
+    (250.0, -0.04),
+    (315.0, 0.12),
+    (400.0, 0.39),
+    (500.0, 0.60),
+    (630.0, 0.61),
+    (800.0, 0.32),
+    (1000.0, 0.00),
+    (1250.0, -0.12),
+    (1600.0, 0.09),
+    (2000.0, 0.36),
+    (2500.0, 0.63),
+    (3150.0, 0.89),
+    (4000.0, 1.28),
+    (5000.0, 1.55),
+    (6300.0, 1.64),
+    (8000.0, 1.69),
+    (10000.0, 1.77),
+    (12500.0, 1.94),
+    (16000.0, 2.00),
+    (20000.0, 2.00),
+]
+
+# Đường cong riêng cho chế độ Vocal+Master, đo bằng đúng cách trên.
+#
+# Vì sao không dùng chung một đường: chế độ này tách stem, làm dày và làm sáng
+# giọng, rồi trộn lại — bản phối tới khâu master đã KHÁC bản gốc. Đo ra thì
+# thấy nó ngược dấu ở dải trầm so với đường của master-only: khối giọng cắt
+# -2,5 dB ở 300 Hz và nâng dải nét, nên cán cân dịch đi và dải trầm hoá ra
+# thừa 1,3-1,9 dB so với bản tham chiếu.
+#
+# Chỉnh lại cán cân tổng KHÔNG làm mất phần giọng nổi lên: giọng vẫn to và
+# sáng hơn so với nhạc nền đúng như khối giọng đã làm. Cái bị kéo về là độ
+# sáng của CẢ BẢN NHẠC, thứ đáng lẽ phải bằng bản tham chiếu.
+DO_NGHIENG_GIONG = [
+    (20.0, 0.00),
+    (25.0, -1.79),
+    (31.5, -1.75),
+    (40.0, -1.68),
+    (50.0, -1.53),
+    (63.0, -1.35),
+    (80.0, -1.34),
+    (100.0, -1.60),
+    (125.0, -1.91),
+    (160.0, -1.74),
+    (200.0, -1.11),
+    (250.0, -0.48),
+    (315.0, -0.01),
+    (400.0, 0.28),
+    (500.0, 0.61),
+    (630.0, 0.68),
+    (800.0, 0.46),
+    (1000.0, 0.00),
+    (1250.0, -0.23),
+    (1600.0, -0.31),
+    (2000.0, -0.24),
+    (2500.0, -0.38),
+    (3150.0, -0.49),
+    (4000.0, -0.44),
+    (5000.0, -0.01),
+    (6300.0, 0.63),
+    (8000.0, 0.77),
+    (10000.0, 0.43),
+    (12500.0, -0.12),
+    (16000.0, -0.28),
+    (20000.0, -0.28),
+]
+
+# Số hệ số của bộ lọc. 4097 ở 44,1 kHz cho độ phân giải tần số chừng 11 Hz —
+# đủ để dựng đúng dáng đường cong ở vùng 30-80 Hz. Ngắn hơn thì phần trầm bị
+# bôi nhoè thành một cái dốc chung.
+BAC_CAN_PHO = 4097
+
+
+def can_pho(x, sr, do_manh=1.0, gioi_han_db=3.5, duong=None):
+    """Áp một đường cong dB lên phổ, pha tuyến tính.
+
+    Dùng FIR đối xứng chứ không dùng chuỗi biquad: đường cong đo được có dáng
+    riêng (nâng dưới 100 Hz, để yên 125-160, nâng 315-800, tựa ở 1-1,6 kHz,
+    rồi nâng dần từ 3 kHz lên), dựng bằng bốn năm biquad thì chỉ ra gần giống.
+    FIR dựng từ chính bảng số nên áp đúng cái đã đo, và kiểm lại được bằng
+    cách đo đáp tuyến.
+
+    Pha tuyến tính nghĩa là mọi tần số bị trễ đúng bằng nhau, nên dáng sóng
+    không bị xé. Cái giá là trễ (bac-1)/2 mẫu, và ta bù lại ngay ở đây.
+
+    `gioi_han_db` chặn hai đầu: khách nói "chỉnh quá tay là dễ hỏng nhạc", nên
+    dù `do_manh` có bị đẩy lên bao nhiêu thì mỗi dải cũng không đi quá mức này.
+    """
+    if do_manh <= 0.001:
+        return x
+    duong = duong or DO_NGHIENG
+    nyq = sr / 2.0
+
+    f = [0.0]
+    g_db = [0.0]
+    for fc, db in duong:
+        if fc >= nyq:
+            break
+        f.append(fc)
+        g_db.append(float(np.clip(db * do_manh, -gioi_han_db, gioi_han_db)))
+    # firwin2 đòi mốc cuối phải đúng Nyquist
+    f.append(nyq)
+    g_db.append(g_db[-1])
+
+    bac = BAC_CAN_PHO if BAC_CAN_PHO % 2 == 1 else BAC_CAN_PHO + 1
+    h = signal.firwin2(bac, np.array(f) / nyq,
+                       10 ** (np.array(g_db) / 20.0)).astype(np.float32)
+
+    tre = (bac - 1) // 2
+    n = x.shape[-1]
+    ra = np.empty_like(x)
+    for k in range(x.shape[0]):
+        y = signal.fftconvolve(x[k], h, mode="full")
+        ra[k] = y[tre:tre + n]
+    return ra.astype(np.float32)
+
+
 def be_rong(x, muc=1.0):
     """Nới hoặc thu bề rộng sân khấu stereo.
 

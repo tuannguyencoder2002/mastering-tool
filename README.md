@@ -154,14 +154,72 @@ Không có bài mẫu → dùng bộ tham số mặc định. Vẫn ra kết qu�
 Chọn bài mẫu thế nào: lấy một bài **cùng thể loại, cùng cách phối**, chất lượng
 phát hành thật. Lấy một bài rock làm mẫu cho một bản ballad là ra kết quả sai.
 
-## Độ lớn đích
+## Auto target — tool tự chọn mức cho từng bài
+
+Ô **Auto target** bật sẵn. Bật thì tool đo bài, rồi tự tính phải đẩy bao nhiêu
+để tới đích; hàng nút LUFS mờ đi nhưng vẫn hiện, bỏ tích là lấy lại quyền.
+
+Đích là **−10,2 LUFS**, và con số đó **đo được chứ không chọn cho hay**: khách
+gửi năm bài đã master qua MasteringBox, đo ra −9,56 / −9,87 / −10,00 / −10,44 /
+−10,92 LUFS.
+
+Điểm mấu chốt là **lượng đẩy không cố định**. Cùng năm bài đó, đầu vào nằm rải
+từ −12,53 tới −14,87 LUFS, nên lượng phải đẩy chạy từ **+2,09 tới +5,31 dB**.
+Cộng một lượng cố định cho mọi bài là sai ngay từ nguyên tắc — đó chính là chỗ
+"tự lựa mức độ phù hợp cho từng bài" nằm.
+
+Sau khi xử lý, tool ghi ra một dòng kể lại nó đã làm gì: *"Auto: measured
+−13,51 LUFS, aimed at −10,2, pushed +3,31 dB"*. Hộp đen quyết định giùm người
+dùng mà không nói nó quyết định cái gì thì lần sau không ai tin nó nữa.
+
+### Đặt tay, khi cần
 
 | Mức | Dùng khi nào |
 |---|---|
 | −16 | podcast, nội dung nhiều lời nói |
-| **−14** | **chuẩn nhạc trực tuyến** — Spotify, YouTube, Apple Music |
+| −14 | **chuẩn nhạc trực tuyến** — Spotify, YouTube, Apple Music |
 | −11 | muốn to hơn mặt bằng, chấp nhận mất một phần dải động |
 | −9 | "to và nện", club/quảng cáo |
+
+## Cân phổ theo đường cong đo được
+
+Thanh **Tone match** (mặc định 100) quyết định áp bao nhiêu phần trăm đường
+cong cân phổ. Đường cong này cũng đo mà ra, và cách đo quan trọng hơn con số.
+
+**Lần đầu tôi đo sai.** Lấy "bản master trừ bản mix" của MasteringBox rồi áp
+thẳng vào — nghe rất có lý, và **làm khớp KÉM ĐI**: lệch phổ đi từ 1,23 lên
+1,42 dB. Sai vì dây chuyền của mình không trung tính; chế độ Vocal+Master đã
+làm sáng bản phối trước khi tới khâu master, nên cộng thêm đường cong nữa là
+đếm hai lần.
+
+Cách đúng: chạy chính dây chuyền của mình với đường cong TẮT, đo xem **đầu ra
+của ta** lệch khỏi bản MasteringBox bao nhiêu ở từng dải, rồi đặt đường cong
+bằng đúng phần lệch đó nhưng ngược dấu.
+
+Vì thế có **hai đường cong, một cho mỗi chế độ**. Chúng ngược dấu nhau ở dải
+trầm: chế độ Vocal+Master cắt −2,5 dB ở 300 Hz trên track giọng và nâng dải
+nét, làm cán cân dịch đi, nên dải trầm hoá ra thừa 1,3-1,9 dB so với bản tham
+chiếu. Kéo cán cân tổng về **không** làm mất phần giọng nổi lên — giọng vẫn to
+và sáng hơn nhạc nền đúng như khối giọng đã làm; cái bị kéo về là độ sáng của
+cả bản nhạc.
+
+### Kết quả, năm cặp trước/sau của khách
+
+Lệch phổ trung bình so với bản MasteringBox, dải 50 Hz - 16 kHz:
+
+| | Lệch |
+|---|---|
+| bản mix gốc, chưa xử lý | 1,04 dB |
+| tool bản cũ | 1,23 dB |
+| **tool mới, Master only** | **0,39 dB** (xấu nhất 0,60) |
+| **tool mới, Vocal + Master** | **0,48 dB** (xấu nhất 0,74) |
+
+Độ to lệch 0,43-0,45 dB, dải động lệch 0,62-1,01 dB, đỉnh liên mẫu −0,98 dBTP.
+
+Một chỗ **cố ý không đuổi theo**: bốn trong năm bản MasteringBox vượt 0 dBTP
+(+0,14 đến +0,60). Tool chặn ở −1 dBTP theo chuẩn phát hành, nên riêng chỗ đó
+thua chừng 1,5 dB độ to. File vượt 0 dBTP sẽ bị nền tảng hạ xuống và méo trên
+một số bộ giải mã — đó là cái giá đáng trả.
 
 Cảnh báo thật: đặt −9 rồi phát lên Spotify thì nền tảng **hạ xuống −14**, và cái
 còn lại là một bản đã bị nén mất dải động — nghe **bẹt hơn** chính bản −14. To
@@ -189,6 +247,11 @@ cho bài 3 phút, đổi lại trúng đích và trần vẫn đúng.
 
 Nút **Before / After / Vocal only** đổi bản đang nghe mà **giữ nguyên vị trí
 kim**. Đổi bản mà nhảy về đầu bài thì không so được gì cả.
+
+Đổi bản là **chuyển âm lượng trong 20 ms**, cả ba bản vẫn chạy song song trên
+cùng một đồng hồ — không tua, không nạp lại, không tiếng tách. Trước đây mỗi
+bản là một thẻ `<audio>` riêng và đổi bản là pause/seek/play: hụt tiếng chừng
+một nhịp cộng một tiếng tách, hai thứ đó to hơn chính khác biệt cần nghe.
 
 Ô **Level-matched** bật sẵn, và nên để nguyên. Lý do: khi so hai bản, **bản nào
 to hơn luôn nghe hay hơn**, bất kể nó có thật sự tốt hơn không. Đây là bẫy tâm

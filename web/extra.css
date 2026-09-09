@@ -119,3 +119,30 @@
 /* Con trỏ đổi theo chỗ: thân sóng kéo được nên hiện bàn tay. */
 .song { cursor: grab; }
 .song:active { cursor: grabbing; }
+
+/* Ô "Auto target" nằm NGAY TRÊN hàng nút LUFS chứ không lẫn vào giữa các thanh
+   kéo: nó quyết định hàng nút ngay dưới còn dùng được hay không, và thứ điều
+   khiển thứ khác thì phải đứng cạnh thứ nó điều khiển. */
+.o-chon.tu-dong {
+  margin: 0 0 9px;
+  font-size: 12px;
+}
+
+/* Hàng nút LUFS bị Auto vô hiệu hoá: mờ đi và không bấm được, nhưng VẪN HIỆN
+   nguyên mức đang nhắm. Ẩn hẳn đi thì người dùng mất manh mối là tool đang
+   nhắm bao nhiêu. */
+#do-lon.tat { opacity: .4; pointer-events: none; }
+
+/* Dòng tool tự chọn bao nhiêu, hiện sau khi xử lý. Không phải cảnh báo nên
+   không dùng màu vàng — đây là tool kể lại nó đã làm gì. */
+.tu-chon {
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--mo);
+  background: var(--noi);
+  border: 1px solid var(--vien);
+  border-radius: var(--bo);
+  padding: 8px 11px;
+  margin: 0 0 14px;
+}
+.tu-chon b { color: var(--chu); font-weight: 600; }

@@ -52,6 +52,8 @@ async def api_master(
     width: float = Form(100),
     vocal_gain: float = Form(0),
     lufs: float = Form(-14),
+    tone: float = Form(100),
+    auto: bool = Form(False),
 ):
     ma = jobs.tao()
     dich = await tai_len.lay_file(config.UPLOAD, audio_ma, audio, ma)
@@ -64,7 +66,7 @@ async def api_master(
     tuy_chon = {"mode": mode, "thickness": thickness, "presence": presence,
                 "space": space, "deess": deess, "warmth": warmth,
                 "vocal_gain": vocal_gain, "bass": bass, "air": air,
-                "width": width,
+                "width": width, "tone": tone, "auto": auto,
                 "lufs": lufs, "reference": f_mau}
 
     def viec(bao):
@@ -81,6 +83,7 @@ async def api_master(
                       "tp": round(kq["sau"]["tp"], 2)},
             "duration": A.thoi_luong(str(dich)),
             "has_vocal": kq["vocal"] is not None,
+            "auto": kq.get("tu_dong"),
         }
 
     jobs.chay(ma, viec)

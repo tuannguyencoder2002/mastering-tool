@@ -246,8 +246,20 @@ $("do-lon").onclick = (e) => {
   [...$("do-lon").children].forEach((b) => b.classList.toggle("chon", b.dataset.lufs === v));
 };
 
+// Auto bật thì hàng nút LUFS mờ đi nhưng KHÔNG bị ẩn: người dùng vẫn thấy
+// mức nào đang được nhắm, và bỏ tích là lấy lại quyền ngay tại chỗ.
+function capNhatAuto() {
+  const bat = $("tu-dong").checked;
+  $("do-lon").classList.toggle("tat", bat);
+  $("ghi-lufs").textContent = bat
+    ? "Auto aims at −10.2 LUFS, measured from your reference masters. Untick to set the target yourself."
+    : "Target LUFS. −14 is the streaming standard.";
+}
+$("tu-dong").onchange = capNhatAuto;
+capNhatAuto();
+
 const THANH = ["thickness", "presence", "space", "deess", "warmth",
-               "vocal_gain", "bass", "air", "width"];
+               "vocal_gain", "bass", "air", "width", "tone"];
 
 // Thanh nào hiển thị kèm đơn vị dB, thanh nào chỉ hiện số trần.
 const THEO_DB = new Set(["vocal_gain", "bass", "air"]);
@@ -346,6 +358,7 @@ $("chay").onclick = async () => {
     if (ma_mau) fd.append("reference_ma", ma_mau);
     fd.append("mode", cheDo);
     fd.append("lufs", String(dichLufs));
+    fd.append("auto", $("tu-dong").checked ? "true" : "false");
     THANH.forEach((k) => fd.append(k, $(k).value));
 
     datTrangThai("Starting", false);
@@ -403,7 +416,28 @@ async function veKetQua(kq) {
   // đỉnh đã bị chặn, dải động đã hẹp. Master chồng lên một bản như vậy chỉ
   // đổi thêm vài phần mười decibel độ lớn lấy vài decibel dải động — một cuộc
   // trao đổi lỗ, mà nhìn con số LUFS tăng lên thì lại tưởng là được.
-  const daMaster = kq.before.lufs > -16 && kq.before.dr < 11;
+  // Kể lại tool đã tự chọn gì. Một hộp đen quyết định giùm người dùng mà
+  // không nói nó quyết định cái gì thì lần sau họ không tin nó nữa.
+  const tc = $("tu-chon");
+  if (kq.auto) {
+    const a = kq.auto;
+    tc.innerHTML = "Auto: measured <b>" + a.lufs_vao + " LUFS</b>, aimed at <b>"
+      + a.dich + "</b>, pushed <b>" + (a.day > 0 ? "+" : "") + a.day + " dB</b>.";
+    tc.hidden = false;
+  } else {
+    tc.hidden = true;
+  }
+
+  // Ngưỡng "file này đã là bản master rồi", đặt theo SỐ ĐO chứ không ước chừng.
+  //
+  // Năm bản mix của khách nằm ở -12,5 tới -14,9 LUFS, dải động 7,6-10,0 dB.
+  // Năm bản master tương ứng nằm ở -9,6 tới -10,9 LUFS, dải động 6,0-8,5 dB.
+  // Hai nhóm tách nhau rõ ở mốc -11,5 LUFS, và phải đòi CẢ hai điều kiện.
+  //
+  // Ngưỡng cũ là `lufs > -16 && dr < 11` — rộng tới mức mọi bản mix bình
+  // thường đều dính, nên nó bắn cảnh báo "đây đã là bản master" vào đúng thứ
+  // mà tool sinh ra để xử lý. Đã thấy nó bắn nhầm vào một bản mix -13,51 LUFS.
+  const daMaster = kq.before.lufs > -11.5 && kq.before.dr < 8.5;
   const matDR = kq.before.dr - kq.after.dr;
   const canh = $("canh-bao");
   if (daMaster) {

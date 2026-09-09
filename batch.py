@@ -144,8 +144,10 @@ def main():
     cau_hinh = VAO.parent / "settings.txt"
     tuy_chon = {"mode": "full", "thickness": 50, "presence": 50, "space": 25,
                 "deess": 50, "warmth": 0, "vocal_gain": 0,
-                "bass": 0, "air": 0, "width": 100}
-    dich_lufs = -14.0
+                "bass": 0, "air": 0, "width": 100, "tone": 100}
+    # -10,2 là đích ĐO ĐƯỢC từ năm bản master tham chiếu của khách, không phải
+    # -14 của chuẩn nhạc trực tuyến. Xem README, mục đường cong tham chiếu.
+    dich_lufs = -10.2
     che_do_album = True
 
     if cau_hinh.exists():

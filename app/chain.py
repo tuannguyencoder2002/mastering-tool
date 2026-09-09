@@ -18,9 +18,37 @@ from . import audio as A
 from .separate import tach_giong
 
 
+# Đích độ to khi bật chế độ tự chọn. Đây là TRUNG BÌNH ĐO ĐƯỢC từ năm bản
+# master mà khách đã làm qua MasteringBox: -9,56 / -9,87 / -10,00 / -10,44 /
+# -10,92 LUFS. Không phải -14 của chuẩn streaming.
+#
+# Vì sao không lấy -14: -14 là mức mà Spotify/YouTube hạ mọi bài về khi phát,
+# nên nó đúng cho việc PHÁT. Nhưng khách nghe file trực tiếp để thẩm định, và
+# ở đó mức nào to hơn thì nghe "rõ ràng" hơn. Đưa bản mix -14 cho khách đã
+# quen -10 thì họ nghe thành yếu, dù về chuẩn là đúng.
+DICH_TU_DONG = -10.2
+
+
 def _bao(f, p, m):
     if f:
         f(p, m)
+
+
+def dich_tu_chon(x, sr) -> dict:
+    """Đo bài rồi trả về đích và lượng phải đẩy.
+
+    Đây là chỗ "tool tự lựa mức độ cho từng bài": lượng đẩy KHÔNG cố định, nó
+    bằng đích trừ mức đo được. Trên năm bản mix của khách, MasteringBox đẩy từ
+    +2,09 tới +5,31 dB — cùng một đích, năm lượng khác nhau. Cộng một lượng cố
+    định là sai ngay từ nguyên tắc.
+    """
+    do = dsp.do_lufs(x, sr)
+    return {
+        "lufs_vao": round(do, 2),
+        "dich": DICH_TU_DONG,
+        "day": round(DICH_TU_DONG - do, 2),
+        "dr_vao": round(dsp.do_dai_dong(x, sr), 2),
+    }
 
 
 def day_giong(v, sr, day=0.5, sang=0.5, khong_gian=0.0, khu_xit=0.5, am=0.0):
@@ -77,7 +105,7 @@ def day_giong(v, sr, day=0.5, sang=0.5, khong_gian=0.0, khu_xit=0.5, am=0.0):
 
 
 def master(x, sr, dich_lufs=-14.0, bai_mau: Optional[Path] = None, bao=None,
-           tram=0.0, cao=0.0, rong=1.0):
+           tram=0.0, cao=0.0, rong=1.0, do_manh_pho=1.0, duong_pho=None):
     """Khâu cuối: cân phổ tổng, gắn kết bản phối, đưa về độ lớn đích.
 
     Có bài mẫu thì dùng matchering — nó đo phổ tần và độ lớn của bài mẫu rồi
@@ -96,11 +124,21 @@ def master(x, sr, dich_lufs=-14.0, bai_mau: Optional[Path] = None, bao=None,
             _bao(bao, 0.5, f"Reference failed, using preset ({e.__class__.__name__})")
 
     _bao(bao, 0.3, "Mastering")
-    # Cân phổ nhẹ tay: dải trầm chắc lại, dải cao mở ra một chút.
-    # Hai tham số `tram`/`cao` cộng thêm vào đây, để người dùng chỉnh gu.
-    y = dsp.eq(x, sr, "lowshelf", 110.0, 1.0 + tram)
-    y = dsp.eq(y, sr, "peak", 400.0, -1.0, Q=0.9)
-    y = dsp.eq(y, sr, "highshelf", 9000.0, 1.5 + cao)
+    # Cân phổ theo ĐƯỜNG CONG ĐO ĐƯỢC, thay cho ba lát EQ trước đây.
+    #
+    # Ba lát cũ là +1 dB ở 110 Hz, -1 dB ở 400 Hz, +1,5 dB ở 9 kHz — tôi chọn
+    # bằng cảm nhận. Đo năm cặp trước/sau của khách rồi mới thấy hai chỗ sai:
+    #   400 Hz : họ NÂNG +0,83 dB, mình HẠ -0,99 -> lệch 1,82 dB, sai cả dấu,
+    #            ngay giữa dải dễ nghe nhất
+    #   4-16 k : họ nâng +1,4 tới +2,3 dB, mình chỉ +0,02 tới +1,46
+    # Ghi chú cũ bảo cắt 400 Hz để "dọn dải đục", nhưng số đo nói dải đục nằm
+    # ở 125-160 Hz, và ở đó MasteringBox để yên.
+    y = dsp.can_pho(x, sr, do_manh=do_manh_pho, duong=duong_pho)
+    # Núm của người dùng cộng thêm LÊN TRÊN đường cong nền, không thay nó.
+    if tram:
+        y = dsp.eq(y, sr, "lowshelf", 110.0, tram)
+    if cao:
+        y = dsp.eq(y, sr, "highshelf", 9000.0, cao)
     y = dsp.be_rong(y, rong)
     # Nén tổng rất nhẹ, chỉ để các nhạc cụ "dính" vào nhau.
     y = dsp.nen(y, sr, nguong_db=-18.0, ti_le=1.8, nhanh_ms=30.0, cham_ms=200.0,
@@ -166,6 +204,10 @@ def xu_ly(duong_dan: Path, tuy_chon: dict, bao: Optional[Callable] = None) -> di
     dich = tuy_chon.get("lufs", -14)
     dich = None if dich is None else float(dich)
     bai_mau = tuy_chon.get("reference")
+    tu_chon = bool(tuy_chon.get("auto", False))
+    # Cân phổ mạnh tay bao nhiêu. 1.0 = đúng đường cong đo được. Có nút riêng
+    # để ai muốn nhẹ hơn thì hạ, chứ không khoá cứng.
+    do_manh_pho = float(tuy_chon.get("tone", 100)) / 100.0
 
     # Nâng/hạ mức TRƯỚC khi vào dây chuyền. Chế độ album cần cái này: mọi máy
     # nén ở đây đều có ngưỡng cố định, nên bài vào nhỏ hơn thì bị nén ít hơn mà
@@ -178,6 +220,16 @@ def xu_ly(duong_dan: Path, tuy_chon: dict, bao: Optional[Callable] = None) -> di
     goc = A.doc(str(duong_dan), sr, mono=False)
     truoc = {"lufs": dsp.do_lufs(goc, sr), "peak": dsp.do_dinh_db(goc),
              "dr": dsp.do_dai_dong(goc, sr), "tp": dsp.dinh_lien_mau_db(goc)}
+
+    # Tự chọn đích: đo bài rồi lấy đích đã đo từ các bản master của khách.
+    tu_dong = None
+    # `lufs=None` là lệnh CỐ Ý của chế độ album: đừng chuẩn hoá độ lớn ở đây,
+    # để lượt hai xử lý cả album cùng lúc. Lệnh đó phải thắng Auto, không thì
+    # bật Auto là album bị chuẩn hoá từng bài và mất hết chênh lệch độ to mà
+    # tác giả cố ý tạo ra.
+    if tu_chon and tuy_chon.get("lufs", -14) is not None:
+        tu_dong = dich_tu_chon(goc, sr)
+        dich = tu_dong["dich"]
 
     ten = _ma_bam(duong_dan)
     thu_muc = config.OUT / ten
@@ -203,13 +255,14 @@ def xu_ly(duong_dan: Path, tuy_chon: dict, bao: Optional[Callable] = None) -> di
         _bao(bao, 0.75, "Mastering")
         ra = master(tron, sr, dich_lufs=dich, bai_mau=bai_mau,
                     bao=lambda p, m2: _bao(bao, 0.75 + 0.2 * p, m2),
-                    tram=tram, cao=cao, rong=rong)
+                    tram=tram, cao=cao, rong=rong, do_manh_pho=do_manh_pho,
+                    duong_pho=dsp.DO_NGHIENG_GIONG)
     else:
         _bao(bao, 0.3, "Mastering")
         ra = master((goc * he_so_truoc).astype(np.float32),
                     sr, dich_lufs=dich, bai_mau=bai_mau,
                     bao=lambda p, m2: _bao(bao, 0.3 + 0.6 * p, m2),
-                    tram=tram, cao=cao, rong=rong)
+                    tram=tram, cao=cao, rong=rong, do_manh_pho=do_manh_pho)
 
     f_wav = thu_muc / "mastered.wav"
     f_mp3 = thu_muc / "mastered.mp3"
@@ -222,5 +275,5 @@ def xu_ly(duong_dan: Path, tuy_chon: dict, bao: Optional[Callable] = None) -> di
     return {
         "wav": f_wav, "mp3": f_mp3,
         "vocal": (thu_muc / "vocal_processed.wav") if che_do == "full" else None,
-        "truoc": truoc, "sau": sau,
+        "truoc": truoc, "sau": sau, "tu_dong": tu_dong,
     }
