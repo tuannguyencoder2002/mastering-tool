@@ -163,47 +163,95 @@ def bao_hoa(x, do_manh=0.3):
     return (np.tanh(x * k) / np.tanh(k)).astype(np.float32)
 
 
-def _doi_cao_do(x, sr, cent):
-    """Đổi cao độ vài phần trăm nửa cung bằng cách lấy mẫu lại rồi cắt/đệm.
+def _mat_do_bat(x, sr) -> float:
+    """Số lần âm thanh bật lên trong một giây — đo xem giọng đọc rap hay hát ngân.
 
-    Cách này làm đổi cả tốc độ, nhưng lệch vài cent thì độ lệch thời gian nhỏ
-    tới mức tai không nghe ra — mà đó chính là thứ tạo hiệu ứng nhân đôi.
+    Cần con số này vì cửa sổ Haas KHÔNG cố định: giọng hát ngân dài thì tai gộp
+    một bản sao trễ 19 ms thành cùng một giọng, nhưng rap thì mỗi phụ âm là một
+    tiếng gõ, và 19 ms đủ để nghe thành tiếng vỗ riêng. Cùng một khối xử lý,
+    một loại chất liệu thấy dày lên, loại kia thấy bị lặp.
     """
-    ti_le = 2 ** (cent / 1200.0)
-    tu, mau = 1000, int(round(1000 * ti_le))
-    y = signal.resample_poly(x, tu, mau, axis=-1).astype(np.float32)
-    n = x.shape[-1]
-    if y.shape[-1] >= n:
-        return y[:, :n]
-    return np.pad(y, ((0, 0), (0, n - y.shape[-1])))
+    mono = x.mean(axis=0) if x.ndim > 1 else x
+    b = max(1, int(0.010 * sr))
+    n = (len(mono) // b) * b
+    if n < b * 10:
+        return 0.0
+    bao = np.sqrt((mono[:n].reshape(-1, b) ** 2).mean(axis=1) + 1e-12)
+    db = 20 * np.log10(bao)
+    # Chỉ tính phần có tiếng, khoảng lặng không nói gì về cách hát.
+    co_tieng = db > (db.max() - 35.0)
+    if co_tieng.sum() < 10:
+        return 0.0
+    d = np.diff(db)
+    # Một "lần bật" = mức nhảy lên hơn 6 dB trong 10 ms.
+    bat = (d[:-1] > 6.0) & co_tieng[1:-1]
+    return float(bat.sum() / (co_tieng.sum() * 0.010))
 
 
-def nhan_doi(x, sr, do_manh=0.5, tre_ms=(19.0, 27.0), cent=(-9.0, 11.0)):
-    """Nhân đôi giọng: hai bản sao lệch cao độ và lệch thời gian, đẩy sang hai bên.
+def _tre_dao(u, sr, tre_ms, sau_ms, hz):
+    """Trễ có dao động chậm, nội suy tuyến tính giữa hai mẫu.
+
+    Dao động chính là chỗ thay cho việc đổi cao độ: độ trễ thay đổi từ từ thì
+    cao độ bản sao cũng lệch đi vài cent theo — đúng hiệu ứng cần — nhưng nó
+    lệch quanh một mốc rồi quay về, KHÔNG dồn lại. Đổi cao độ bằng cách lấy
+    mẫu lại thì đổi luôn cả tốc độ, và độ lệch dồn theo thời gian: đo được bản
+    sao trôi 0,9 giây ở giây thứ 180 của một bài 3 phút. Đó là lý do khách nghe
+    thành hai giọng lệch nhau, không phải một giọng dày.
+    """
+    n = u.shape[-1]
+    t = np.arange(n, dtype=np.float64)
+    d = (tre_ms + sau_ms * np.sin(2.0 * np.pi * hz * t / sr)) * sr / 1000.0
+    vt = t - d
+    i0 = np.floor(vt).astype(np.int64)
+    le = (vt - i0).astype(np.float32)
+    i0 = np.clip(i0, 0, n - 1)
+    i1 = np.clip(i0 + 1, 0, n - 1)
+    return (u[..., i0] * (1.0 - le) + u[..., i1] * le).astype(np.float32)
+
+
+def nhan_doi(x, sr, do_manh=0.5, tre_ms=None):
+    """Nhân đôi giọng: hai bản sao trễ và dao động nhẹ, trải sang hai bên.
 
     ĐÂY mới là thứ "làm dày giọng hát". Không bộ mastering nào làm được việc
     này, vì mastering chỉ nhìn thấy bản phối đã trộn — muốn dày giọng thì phải
     có track giọng riêng.
 
-    Lệch thời gian ~20 ms là ngưỡng Haas: tai gộp thành MỘT giọng rộng hơn chứ
-    không nghe thành tiếng vọng. Quá 40 ms là bắt đầu nghe ra hai giọng.
+    Ba chỗ khác bản trước, cả ba đều do đo mà ra:
+
+    1. Không đổi cao độ bằng lấy mẫu lại nữa. Nó đổi cả tốc độ nên bản sao
+       trôi: +150 ms ở giây 30, +904 ms ở giây 180. Thay bằng trễ dao động
+       chậm — vẫn lệch cao độ vài cent, nhưng lệch quanh một mốc, không dồn.
+    2. Mốc trễ chọn theo chất liệu, không viết cứng 19/27 ms. Rap thì lấy
+       8/11 ms, hát ngân thì 15/19 ms.
+    3. Bản sao không bị đẩy hẳn một bên. Trước đó tai trái nghe một tiếng vọng
+       19 ms mà tai phải nghe một tiếng vọng 27 ms, hai bên chả liên quan gì
+       nhau; giờ mỗi bản sao trải 85/15 nên vẫn rộng mà không thành hai tiếng
+       vọng rời.
     """
     if do_manh <= 0.01:
         return x
     if x.shape[0] == 1:
         x = np.repeat(x, 2, axis=0)
 
+    if tre_ms is None:
+        mat_do = _mat_do_bat(x, sr)
+        # Ngưỡng 2,2 lần/giây: đo trên bài rap thử được ~3,5; một bài ballad
+        # cùng cách đo được dưới 1,5.
+        tre_ms = (8.0, 11.0) if mat_do > 2.2 else (15.0, 19.0)
+
     ra = x.copy()
     muc = 0.55 * do_manh
     giua = x.mean(axis=0, keepdims=True)
-    for i, (t_ms, c) in enumerate(zip(tre_ms, cent)):
-        ban = _doi_cao_do(giua, sr, c)
-        d = int(t_ms * sr / 1000.0)
-        ban = np.pad(ban, ((0, 0), (d, 0)))[:, :x.shape[-1]]
+    # Hai tần số dao động lệch nhau và không chia hết cho nhau, để hai bản sao
+    # không bao giờ trùng pha thành một tiếng vọng duy nhất.
+    for i, (t_ms, hz) in enumerate(zip(tre_ms, (0.23, 0.31))):
+        ban = _tre_dao(giua, sr, t_ms, 1.2, hz)
         # Bản sao hơi tối hơn giọng chính, để nó nằm phía sau chứ không tranh chỗ.
         ban = loc_thong_thap(ban, sr, 7000.0)
         ban = loc_thong_cao(ban, sr, 150.0)
-        ra[i % 2] += ban[0] * muc
+        gan, xa = (i % 2), 1 - (i % 2)
+        ra[gan] += ban[0] * muc * 0.85
+        ra[xa] += ban[0] * muc * 0.15
     return ra.astype(np.float32)
 
 
