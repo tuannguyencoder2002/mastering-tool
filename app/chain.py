@@ -286,6 +286,8 @@ def xu_ly(duong_dan: Path, tuy_chon: dict, bao: Optional[Callable] = None) -> di
     # Tự chọn đích: đo bài rồi lấy đích đã đo từ các bản master của khách.
     tu_dong = None
     tu_chinh_giong = None
+    stem_vocal = stem_nhac = None
+    bu_giong = None
     # `lufs=None` là lệnh CỐ Ý của chế độ album: đừng chuẩn hoá độ lớn ở đây,
     # để lượt hai xử lý cả album cùng lúc. Lệnh đó phải thắng Auto, không thì
     # bật Auto là album bị chuẩn hoá từng bài và mất hết chênh lệch độ to mà
@@ -314,6 +316,7 @@ def xu_ly(duong_dan: Path, tuy_chon: dict, bao: Optional[Callable] = None) -> di
         _bao(bao, 0.05, "Separating stems")
         stem = tach_giong(duong_dan, bao_tien_do=lambda p, m: _bao(bao, 0.05 + 0.45 * p, m),
                           giu_nhac_nen=True)
+        stem_vocal, stem_nhac = stem["vocals"], stem["no_vocals"]
         v = (A.doc(str(stem["vocals"]), sr, mono=False) * he_so_truoc).astype(np.float32)
         n = (A.doc(str(stem["no_vocals"]), sr, mono=False) * he_so_truoc).astype(np.float32)
 
@@ -352,6 +355,16 @@ def xu_ly(duong_dan: Path, tuy_chon: dict, bao: Optional[Callable] = None) -> di
         tron = (v[:, :m] + n[:, :m]).astype(np.float32)
 
         A.ghi(str(thu_muc / "vocal_processed.wav"), v[:, :m], sr)
+        # Khối giọng thực tế làm to/nhỏ đi bao nhiêu dB. Trình duyệt cần con số
+        # NÀY để dựng lại cho đúng.
+        #
+        # Không suy ra được từ tham số: hai tầng nén vừa hạ phần to vừa cộng bù
+        # (+2,5 và +1,5 dB), nên mức cuối phụ thuộc chính bài đó ồn tới đâu.
+        # Dựng bản nghe thử bằng đúng lượng bù mà bỏ phần hạ thì giọng vống lên
+        # và cán cân phổ lệch 3,5 dB — đã đo thấy đúng vậy.
+        v_tho = A.doc(str(stem["vocals"]), sr, mono=False)
+        bu_giong = float(dsp.do_lufs(v[:, :m], sr) - dsp.do_lufs(v_tho, sr))
+        del v_tho
         _bao(bao, 0.75, "Mastering")
         ra = master(tron, sr, dich_lufs=dich, bai_mau=bai_mau,
                     bao=lambda p, m2: _bao(bao, 0.75 + 0.2 * p, m2),
@@ -379,4 +392,9 @@ def xu_ly(duong_dan: Path, tuy_chon: dict, bao: Optional[Callable] = None) -> di
         "vocal": (thu_muc / "vocal_processed.wav") if che_do == "full" else None,
         "truoc": truoc, "sau": sau, "tu_dong": tu_dong,
         "tu_chinh_giong": tu_chinh_giong,
+        # Hai stem THÔ (chưa xử lý gì). Trình duyệt cần chúng để tự dựng lại
+        # cả chuỗi bằng Web Audio và nghe được thay đổi ngay khi kéo thanh,
+        # thay vì phải chạy lại cả dây chuyền trên máy chủ.
+        "stem_vocal": stem_vocal, "stem_nhac": stem_nhac,
+        "bu_giong": round(bu_giong, 3) if bu_giong is not None else None,
     }

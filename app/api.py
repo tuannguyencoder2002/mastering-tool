@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
-from . import config, jobs, chain, khoa, tai_len, tinh, tu_chinh
+from . import config, dsp, jobs, chain, khoa, tai_len, tinh, tu_chinh
 from . import audio as A
 
 app = FastAPI(title="Mastering")
@@ -102,6 +102,7 @@ async def api_master(
             "has_vocal": kq["vocal"] is not None,
             "auto": kq.get("tu_dong"),
             "auto_vocal": kq.get("tu_chinh_giong"),
+            "bu_giong": kq.get("bu_giong"),
         }
 
     jobs.chay(ma, viec)
@@ -122,7 +123,9 @@ def api_audio(ma: str, kind: str = "mastered"):
     d = _ket.get(ma)
     if not d:
         raise HTTPException(404, "No result for this job.")
-    bang = {"original": d["goc"], "mastered": d["wav"], "vocal": d["vocal"]}
+    bang = {"original": d["goc"], "mastered": d["wav"], "vocal": d["vocal"],
+            # Hai stem thô, để trình duyệt tự dựng chuỗi và nghe tức thì.
+            "stem_vocal": d.get("stem_vocal"), "stem_nhac": d.get("stem_nhac")}
     f = bang.get(kind)
     if not f or not Path(f).exists():
         raise HTTPException(404, f"No audio: {kind}")
@@ -137,6 +140,31 @@ def api_download(ma: str, fmt: str = "wav"):
     f = d["mp3"] if fmt == "mp3" else d["wav"]
     return FileResponse(str(f), filename=f"mastered.{fmt}",
                         media_type="application/octet-stream")
+
+
+@app.get("/api/loc")
+def api_loc(che_do: str = "full"):
+    """Bộ lọc cân phổ dưới dạng chuỗi hệ số.
+
+    Trình duyệt nạp thẳng cái này vào ConvolverNode, nên đường cong nghe thử
+    KHỚP TỪNG dB với đường cong lúc render — không phải dựng lại gần đúng bằng
+    vài khối EQ.
+    """
+    import numpy as np
+    from scipy import signal as sg
+    duong = dsp.DO_NGHIENG_GIONG if che_do == "full" else dsp.DO_NGHIENG
+    nyq = config.SR / 2.0
+    f, g_db = [0.0], [0.0]
+    for fc, db in duong:
+        if fc >= nyq:
+            break
+        f.append(fc)
+        g_db.append(float(np.clip(db, -3.5, 3.5)))
+    f.append(nyq)
+    g_db.append(g_db[-1])
+    bac = dsp.BAC_CAN_PHO if dsp.BAC_CAN_PHO % 2 else dsp.BAC_CAN_PHO + 1
+    h = sg.firwin2(bac, np.array(f) / nyq, 10 ** (np.array(g_db) / 20.0))
+    return {"sr": config.SR, "he_so": [round(float(x), 9) for x in h]}
 
 
 @app.get("/api/health")
