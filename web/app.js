@@ -151,6 +151,8 @@ const may = (() => {
     // và hệ số đang thực sự nhân vào tín hiệu ra loa.
     _chan(k) { return !!nguon[k]; },
     _mucRaLoa(k) { return num[k] ? num[k].gain.value : null; },
+    /** Hệ số bù độ to đang áp. Phần vẽ sóng cần con số này để co giãn theo. */
+    heBu() { return bu; },
     dai() { return dem[dangNghe] ? dem[dangNghe].duration : 0; },
     dangPhat() { return chay; },
     gio() {
@@ -329,6 +331,7 @@ $("lufs").oninput = () => {
   if (lufsDaDung === null) return;
   const lech = dichLufs - lufsDaDung;
   may.buDoTo(lech);
+  veSong();                     // hình phải đổi theo tiếng
   // Cập nhật luôn con số LUFS trên khối kết quả, không thì nó nói một đằng mà
   // tai nghe một nẻo.
   if (soDo) {
@@ -362,6 +365,36 @@ const THANH = ["thickness", "presence", "space", "deess", "warmth",
 // Thanh nào hiển thị kèm đơn vị dB, thanh nào chỉ hiện số trần.
 const THEO_DB = new Set(["vocal_gain", "bass", "air"]);
 
+/** Thang mốc dưới một thanh kéo.
+ *
+ *  Khách nhìn thanh mà không có mốc thì không biết mình đang ở đâu trong dải —
+ *  "48" là to hay nhỏ? Vài con số ở đúng vị trí trả lời ngay, và rẻ hơn nhiều
+ *  so với một dòng chữ giải thích.
+ */
+function veThangDo(k, cacMoc) {
+  const el = $(k);
+  const nhan = el.closest(".keo");
+  if (!nhan || nhan.querySelector(".thang")) return;
+  const lo = +el.min, hi = +el.max;
+  const t = document.createElement("div");
+  t.className = "thang";
+  t.innerHTML = cacMoc.map((v) => {
+    const ti = ((v - lo) / (hi - lo)) * 100;
+    const nhanSo = typeof v === "number" && (k === "bass" || k === "air"
+      || k === "vocal_gain") && v > 0 ? "+" + v : String(v);
+    return '<i style="left:' + ti.toFixed(2) + '%">' + nhanSo + "</i>";
+  }).join("");
+  nhan.appendChild(t);
+}
+
+const THANG = {
+  lufs: [-11, -10, -9, -8, -7],
+  thickness: [0, 50, 100], presence: [0, 50, 100], space: [0, 50, 100],
+  deess: [0, 50, 100], warmth: [0, 50, 100], tone: [0, 50, 100],
+  vocal_gain: [-6, 0, 6], bass: [-4, 0, 4], air: [-4, 0, 4],
+  width: [60, 100, 160],
+};
+
 function veThanh(k) {
   const el = $(k);
   $("v-" + k).textContent = THEO_DB.has(k)
@@ -376,7 +409,14 @@ THANH.forEach((k) => {
     danhDauTay(k);            // người dùng vừa kéo tay -> tool đừng đè lên nữa
   };
   veThanh(k);
+  if (THANG[k]) veThangDo(k, THANG[k]);
 });
+
+// Thanh độ to không nằm trong THANH (nó gửi lên bằng khoá riêng), nên vẽ thang
+// cho nó ở đây — và phải SAU khi THANG được khai báo. Gọi sớm hơn thì `const`
+// còn trong vùng chết và chạy thật là văng ReferenceError, mà `node --check`
+// không bắt được vì cú pháp vẫn đúng.
+veThangDo("lufs", THANG.lufs);
 
 // Preset chỉ là một bộ giá trị đặt sẵn cho các thanh — bấm xong vẫn kéo tay
 // được. Không giấu tham số nào đi: người dùng luôn nhìn thấy preset vừa đặt
@@ -463,6 +503,16 @@ function datMoc(k, gt) {
   const NUM = 13;                         // bề ngang núm, khớp với extra.css
   const ti = (gt - lo) / (hi - lo);
   m.style.left = (NUM / 2 + ti * (w - NUM)).toFixed(1) + "px";
+  // Chiều dọc TÍNH THEO rãnh trượt thật, không viết cứng.
+  //
+  // Trước đây để bottom cố định, chạy đúng cho tới khi thêm hàng thang mốc bên
+  // dưới — lúc đó nhãn cao thêm 12px và mọi vạch tụt xuống đè lên hàng số.
+  // Cái gì đo được thì đừng đoán.
+  const rN = nhan.getBoundingClientRect();
+  const rE = el.getBoundingClientRect();
+  if (rE.height) {
+    m.style.bottom = (rN.bottom - rE.top - rE.height / 2 - 4.5).toFixed(1) + "px";
+  }
 }
 
 /** Trượt một thanh tới mức mới thay vì nhảy cóc.
@@ -890,9 +940,15 @@ function veSong() {
 
   // Vẽ bản gốc mờ phía sau, bản đang nghe đậm phía trước: chênh lệch dải động
   // giữa hai bản nhìn thấy được ngay, không cần nghe.
-  const ve = (d, mau) => {
+  // Sóng của bản ĐÃ XỬ LÝ co giãn theo thanh độ to, bản gốc thì không.
+  //
+  // Kéo độ to mà hình không nhúc nhích thì người dùng không tin là có gì đổi —
+  // tai nghe một đằng, mắt thấy một nẻo. Đỉnh vượt khung bị cắt ngang, và đó
+  // là thông tin thật: đúng chỗ bộ hạn đỉnh sẽ phải làm việc.
+  const ve = (d, mau, he) => {
     if (!d) return;
     g.fillStyle = mau;
+    const k = he || 1;
     const giay_moi_cot = MS_MOI_COT / 1000;
     const i0 = Math.max(0, Math.floor(xemDau / giay_moi_cot));
     const i1 = Math.min(d.length, Math.ceil((xemDau + xemDai) / giay_moi_cot));
@@ -904,21 +960,23 @@ function veSong() {
         const a = i0 + Math.floor(px * cot_moi_px);
         const b = i0 + Math.floor((px + 1) * cot_moi_px);
         for (let i = a; i < b; i++) if (d[i] > m) m = d[i];
-        const h = m * (caoSong * 0.92);
+        const h = Math.min(1, m * k) * (caoSong * 0.92);
         g.fillRect(px, CAO_THUOC + (caoSong - h) / 2, 1, h);
       }
     } else {
       // Phóng tới mức một cột đỉnh rộng hơn một điểm ảnh: vẽ thành thanh.
       const w = r.width / (i1 - i0);
       for (let i = i0; i < i1; i++) {
-        const h = d[i] * (caoSong * 0.92);
+        const h = Math.min(1, d[i] * k) * (caoSong * 0.92);
         g.fillRect((i - i0) * w, CAO_THUOC + (caoSong - h) / 2,
                    Math.max(0.8, w - 0.3), h);
       }
     }
   };
-  if (dangNghe !== "original") ve(dinh.original, "#2e2e38");
-  ve(dinh[dangNghe], dangNghe === "original" ? "#4a4a58" : "#6e63f2");
+  const heSong = may.heBu();
+  if (dangNghe !== "original") ve(dinh.original, "#2e2e38", 1);
+  ve(dinh[dangNghe], dangNghe === "original" ? "#4a4a58" : "#6e63f2",
+     dangNghe === "original" ? 1 : heSong);
 
   // Thước thời gian. Bước chia chọn theo CHỖ THẬT SỰ CÓ trên màn: đòi tối
   // thiểu 56 điểm ảnh cho mỗi nhãn rồi lấy bước nhỏ nhất còn vừa.

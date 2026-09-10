@@ -209,7 +209,7 @@
 
 .keo .moc {
   position: absolute;
-  /* Rãnh trượt cao 3px và nằm ở đáy nhãn, nên -3px đưa vạch 9px vào giữa rãnh */
+  /* Vị trí dọc do JS đặt theo rãnh trượt thật; đây chỉ là mức lùi an toàn */
   bottom: -3px;
   width: 2px;
   height: 9px;
@@ -253,3 +253,29 @@
   margin: -6px 0 10px;
   min-height: 14px;
 }
+
+/* Thang mốc dưới thanh kéo. Chữ rất nhỏ và rất mờ: nó là cái để liếc, không
+   phải để đọc. Đậm hơn một chút là cả cột trái thành bảng số. */
+.keo .thang {
+  grid-column: 1 / -1;
+  position: relative;
+  height: 11px;
+  margin-top: 1px;
+}
+
+.keo .thang i {
+  position: absolute;
+  transform: translateX(-50%);
+  font-size: 9px;
+  font-style: normal;
+  color: #55555e;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Mốc đầu và mốc cuối kéo vào trong cho khỏi tràn khỏi cột */
+.keo .thang i:first-child { transform: none; }
+.keo .thang i:last-child { transform: translateX(-100%); }
+
+/* Thanh có thang thì bớt khoảng cách dưới, không thì cột dài ra vô ích */
+.keo:has(.thang) { margin-bottom: 6px; }
