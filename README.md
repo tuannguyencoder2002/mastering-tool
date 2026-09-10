@@ -181,6 +181,88 @@ dùng mà không nói nó quyết định cái gì thì lần sau không ai tin 
 | −11 | muốn to hơn mặt bằng, chấp nhận mất một phần dải động |
 | −9 | "to và nện", club/quảng cáo |
 
+## Auto-master: thanh kéo tự chỉnh theo từng bài
+
+Nhập file vào là các thanh tự trượt tới mức hợp với bài đó. Chia **hai đợt**,
+vì lý do kỹ thuật chứ không phải thẩm mỹ:
+
+| Đợt | Khi nào | Nhóm | Vì sao |
+|---|---|---|---|
+| 1 | vừa nhập file, ~2 giây | Bass, Air, Width | đo thẳng trên bản phối |
+| 2 | lúc xử lý, sau khi tách stem | Thickness, Presence, De-ess, Level, Space | muốn biết giọng dày hay mỏng thì phải tách nó ra trước |
+
+Bắt người dùng đợi 20-30 giây tách stem ngay lúc nhập file là vô lý, trong khi
+lúc bấm Process thì đằng nào cũng phải tách. Nên đợt hai đi kèm quá trình xử lý
+và các thanh nhóm Vocal trượt ngay tại đó.
+
+### Ngưỡng lấy từ đâu
+
+Không ngưỡng nào chọn bằng cảm nhận. Tất cả là trung vị đo trên năm bản mix của
+khách (`scratchpad/do_chuan.py`):
+
+| Số đo | Trung vị | Lệch chuẩn |
+|---|---|---|
+| trầm (50-120 Hz so với 300-3000) | +18,62 dB | 2,18 |
+| cao (8-16 kHz so với 300-3000) | −15,70 dB | 2,56 |
+| bề rộng bản phối | 0,355 | 0,104 |
+| giọng so với nhạc nền | +0,34 LUFS | 2,16 |
+| bề rộng giọng | 0,219 | 0,030 |
+| dải nét của giọng (3-5 kHz) | −12,02 dB | 1,96 |
+| dải xì của giọng (5,5-9,5 kHz) | −14,17 dB | 2,71 |
+
+Mọi hiệu chỉnh đều **bù một nửa** khoảng lệch, có **vùng chết** (lệch chưa tới
+1 dB thì để yên) và **chặn biên** (Bass/Air tối đa ±2 dB, Level ±3 dB, các thanh
+0-100 giới hạn trong 20-80). Ba thứ đó là cố ý: khách nói *"chỉnh quá tay là dễ
+hỏng nhạc"*, mà một luật tự động chỉnh tới nơi tới chốn thì gặp bài lạ là nó phá.
+
+### Bài lạ thì sao
+
+Chặn biên chỉ cứu được bài **lệch**, không cứu được bài mà **phép đo trở nên vô
+nghĩa** — hai chuyện khác hẳn nhau. Nên có thêm cửa gác: gặp mấy trường hợp
+dưới đây thì tool **không đề nghị gì cả**, thanh giữ mặc định, và nó nói lý do
+ngay dưới tên file.
+
+| Kiểu file | Chuyện gì xảy ra nếu không gác | Cửa gác |
+|---|---|---|
+| nhạc nền, không lời | track "giọng" chỉ là tiếng rò rỉ; luật kéo Level lên kịch +3 dB để khuếch đại tiếng rò | giọng thấp hơn nhạc nền quá 25 dB -> bỏ qua nhóm Vocal |
+| a cappella | ngược lại, Level bị hạ vô cớ | mức giọng ngoài khoảng −12…+12 dB -> bỏ qua |
+| mono | bề rộng bằng 0, luật đẩy Thickness lên kịch 80 | bề rộng dưới 0,02 -> giữ mặc định Thickness và Width |
+| ngắn hơn 20 giây | không đủ cửa sổ đo phổ | bỏ qua cả hai nhóm |
+| im lặng | mọi phép đo vô nghĩa | bỏ qua |
+
+Đã dựng đúng năm loại đó từ stem của khách và kiểm: cả năm đều bị bắt.
+
+### Trên giao diện
+
+- Thanh **trượt** tới mức mới chứ không nhảy cóc, lệch nhau 40 ms một thanh.
+  Cùng nhảy một lúc thì trông như lỗi vẽ.
+- Mỗi thanh để lại một **vạch nhỏ** ở mức tool đã chọn. Kéo đi đâu vẫn thấy, và
+  **bấm vào vạch là về lại đó**. Thiếu chi tiết này thì kéo một cái là mất luôn
+  gợi ý, và lần sau không ai dám để tool tự chỉnh nữa.
+- Thẻ **Auto-master** cạnh tên nhóm sáng khi nhóm đang ở mức tự chọn, mờ đi khi
+  người dùng kéo tay bất kỳ thanh nào trong nhóm. Một cái thẻ thay cho năm dòng
+  chữ "auto".
+- Dưới tên file hiện **số đo được**, không phải chỉ kết quả:
+  `−13,51 LUFS · 9,96 dB dyn · bass heavy · top bright · width 0,187`.
+- Thanh nào người dùng đã kéo tay thì **tool không đè lên**, kể cả khi họ kéo
+  trước lúc đợt hai chạy.
+- Máy bật "giảm chuyển động" thì bỏ hết hiệu ứng, thanh nhảy thẳng tới đích.
+
+### Giới hạn phải nói rõ
+
+Chỉ có **một hồ sơ chuẩn**, đo từ năm bài rap/hip-hop. Tool đang được căn cho
+dòng nhạc đó. Bài thuộc dòng khác vẫn chạy vì mọi hiệu chỉnh đều bù nửa và chặn
+biên, nhưng nó chỉnh *chưa tối ưu* chứ không phải chỉnh *đúng*.
+
+Chưa có bộ phân loại thể loại, và lý do không phải vì khó: phân loại xong thì áp
+mốc nào? Muốn có hồ sơ cho ballad hay EDM thì phải có chừng năm bài đã master
+của dòng đó để đo. Chỗ chứa hồ sơ (`HO_SO` trong `app/tu_chinh.py`) đã dựng sẵn
+theo tên, hôm nào có dữ liệu thì thêm một khoá là xong.
+
+Làm dòng khác ngay bây giờ thì vẫn có đường: thả một bài mẫu vào ô **Reference
+track**, matchering ép theo đúng bài đó — cách giải quyết thể loại không cần bộ
+phân loại.
+
 ## Cân phổ theo đường cong đo được
 
 Thanh **Tone match** (mặc định 100) quyết định áp bao nhiêu phần trăm đường

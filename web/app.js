@@ -212,12 +212,47 @@ function gan(vungId, inputId, xong) {
   v.addEventListener("drop", (e) => xong(e.dataTransfer.files[0]));
 }
 
-gan("tha", "chon-file", (f) => {
+let maTepDaTai = null;      // id file đã tải lên, dùng lại lúc bấm Process
+
+gan("tha", "chon-file", async (f) => {
   if (!f) return;
   tep = f;
+  maTepDaTai = null;
   $("ten-file").textContent = f.name;
   $("thong-tin").textContent = (f.size / 1048576).toFixed(1) + " MB";
   $("chay").disabled = false;
+  // Chọn file xong là tool quên mọi thứ của bài trước.
+  tayKeo.clear();
+  Object.keys(mocAuto).forEach((k) => delete mocAuto[k]);
+  document.querySelectorAll(".keo .moc").forEach((m) => m.remove());
+  ["vocal", "master"].forEach((g) => $("the-" + g).classList.remove("bat"));
+  hienSoDo(null);
+
+  if (!$("tu-dong").checked) return;
+  try {
+    // Tải file lên NGAY chứ không đợi lúc bấm Process. Vừa để phân tích được,
+    // vừa làm cú bấm Process sau đó chạy luôn thay vì đứng đợi tải.
+    datTrangThai("Reading the track", false);
+    maTepDaTai = await taiLen(f, (p, i, n) => {
+      $("thanh-tien").style.width = (p * 100).toFixed(1) + "%";
+      datTrangThai(`Uploading ${Math.round(p * 100)}%  (${i}/${n})`, false);
+    });
+    const r = await fetch("/api/phan-tich", {
+      method: "POST",
+      body: new URLSearchParams({ audio_ma: maTepDaTai }),
+    });
+    if (!r.ok) throw new Error("analysis failed");
+    const kq = await r.json();
+    hienSoDo(kq.do, kq.bo_qua);
+    datNhom("master", kq.thanh);
+    datTrangThai(kq.bo_qua ? "" : "Ready", false);
+    $("thanh-tien").style.width = "0%";
+  } catch (e) {
+    // Phân tích hỏng thì thôi, không chặn người dùng: thanh giữ mặc định và
+    // bấm Process vẫn chạy được như thường.
+    datTrangThai("", false);
+    $("thanh-tien").style.width = "0%";
+  }
 });
 
 gan("tha-mau", "chon-mau", (f) => {
@@ -272,7 +307,11 @@ function veThanh(k) {
 }
 
 THANH.forEach((k) => {
-  $(k).oninput = () => { veThanh(k); boPreset(); };
+  $(k).oninput = () => {
+    veThanh(k);
+    boPreset();
+    danhDauTay(k);            // người dùng vừa kéo tay -> tool đừng đè lên nữa
+  };
   veThanh(k);
 });
 
@@ -300,6 +339,131 @@ $("preset").onclick = (e) => {
   boPreset();
   e.target.classList.add("chon");
 };
+
+/* -------------------------------------------------- tự chỉnh thanh kéo
+ *
+ * Hai đợt, vì lý do kỹ thuật chứ không phải thẩm mỹ:
+ *   đợt 1  nhập file xong  -> đo bản phối (2 giây) -> nhóm MASTER
+ *   đợt 2  lúc xử lý       -> sau khi tách stem   -> nhóm VOCAL
+ * Muốn biết giọng dày hay mỏng thì phải tách nó ra khỏi bản phối trước, mà
+ * tách stem mất 20-30 giây — bắt người dùng đợi ngần ấy ngay lúc nhập file là
+ * vô lý, trong khi lúc xử lý thì đằng nào cũng phải tách.
+ */
+const NHOM = {
+  vocal: ["thickness", "presence", "space", "deess", "vocal_gain"],
+  master: ["bass", "air", "width"],
+};
+const tayKeo = new Set();     // thanh người dùng đã tự kéo
+const mocAuto = {};           // mức tool đã chọn, để vẽ vạch và quay về
+
+const itChuyenDong = window.matchMedia
+  && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function nhomCua(k) {
+  return Object.keys(NHOM).find((g) => NHOM[g].includes(k));
+}
+
+/** Người dùng kéo tay một thanh: thẻ của cả nhóm mờ đi, và từ đó tool không
+ *  đặt lại thanh này nữa. Đè lên chỉnh tay của người dùng là cách nhanh nhất
+ *  để họ không bao giờ tin tính năng tự động nữa. */
+function danhDauTay(k) {
+  // KHÔNG lọc theo "tool đã đặt thanh này chưa". Người dùng có thể kéo một
+  // thanh của nhóm VOCAL ngay lúc vừa nhập file, tức trước khi đợt hai chạy —
+  // lọc như vậy là bỏ qua đúng những lần chỉnh tay sớm nhất, rồi đợt hai đè
+  // lên ngay trước mắt họ. Đã dính thật khi chạy thử.
+  tayKeo.add(k);
+  const g = nhomCua(k);
+  if (g) $("the-" + g).classList.remove("bat");
+}
+
+/** Vạch nhỏ trên rãnh trượt, đúng chỗ tool đã chọn. Bấm vào là về lại đó. */
+function datMoc(k, gt) {
+  const el = $(k);
+  const nhan = el.closest(".keo");
+  if (!nhan) return;
+  let m = nhan.querySelector(".moc");
+  if (!m) {
+    m = document.createElement("i");
+    m.className = "moc";
+    m.title = "Auto-master picked this — click to go back";
+    m.onclick = () => {
+      tayKeo.delete(k);
+      chayThanh(k, mocAuto[k], 0);
+      const g = nhomCua(k);
+      // Thẻ nhóm sáng lại chỉ khi KHÔNG còn thanh nào trong nhóm bị kéo tay.
+      if (g && !NHOM[g].some((x) => tayKeo.has(x))) $("the-" + g).classList.add("bat");
+    };
+    nhan.appendChild(m);
+  }
+  const lo = +el.min, hi = +el.max;
+  const w = el.clientWidth || nhan.clientWidth;
+  const NUM = 13;                         // bề ngang núm, khớp với extra.css
+  const ti = (gt - lo) / (hi - lo);
+  m.style.left = (NUM / 2 + ti * (w - NUM)).toFixed(1) + "px";
+}
+
+/** Trượt một thanh tới mức mới thay vì nhảy cóc.
+ *
+ *  Lệch nhau 40 ms một thanh: cùng nhảy một lúc thì trông như lỗi vẽ, lệch
+ *  nhau thì đọc ra là tool đang lần lượt đặt từng thứ. */
+function chayThanh(k, dich, tre) {
+  const el = $(k);
+  const dau = +el.value;
+  if (itChuyenDong || dau === dich) {
+    el.value = dich;
+    veThanh(k);
+    datMoc(k, dich);
+    return;
+  }
+  const nhan = el.closest(".keo");
+  const so = nhan && nhan.querySelector("b");
+  const DAI = 500;
+  setTimeout(() => {
+    if (so) so.classList.add("dang-chay");
+    const t0 = performance.now();
+    const buoc = () => {
+      const p = Math.min(1, (performance.now() - t0) / DAI);
+      const e = 1 - Math.pow(1 - p, 3);        // ease-out
+      el.value = dau + (dich - dau) * e;
+      veThanh(k);
+      if (p < 1) requestAnimationFrame(buoc);
+      else {
+        el.value = dich;
+        veThanh(k);
+        datMoc(k, dich);
+        if (so) so.classList.remove("dang-chay");
+      }
+    };
+    requestAnimationFrame(buoc);
+  }, tre);
+}
+
+/** Đặt cả một nhóm, bỏ qua thanh nào người dùng đã tự kéo. */
+function datNhom(g, thanh) {
+  const ds = Object.entries(thanh || {}).filter(([k]) => !tayKeo.has(k));
+  ds.forEach(([k, v], i) => {
+    mocAuto[k] = v;
+    chayThanh(k, v, i * 40);
+  });
+  if (ds.length) $("the-" + g).classList.add("bat");
+}
+
+/** Dãy số ĐO ĐƯỢC dưới tên file. Hiện số đo chứ không chỉ hiện kết quả — đây
+ *  là thứ làm người dùng tin đang dùng một thiết bị đo. */
+function hienSoDo(d, bo_qua) {
+  const el = $("so-do-file");
+  const c = [];
+  if (d) {
+    if (d.lufs !== undefined) c.push(d.lufs + " LUFS");
+    if (d.dr !== undefined) c.push(d.dr + " dB dyn");
+    if (d.tram !== undefined) c.push("bass " + (d.tram > 20 ? "heavy" : d.tram < 17 ? "light" : "even"));
+    if (d.cao !== undefined) c.push("top " + (d.cao > -14.5 ? "bright" : d.cao < -18 ? "dull" : "even"));
+    if (d.rong !== undefined) c.push("width " + d.rong);
+  }
+  if (bo_qua) c.push(bo_qua);
+  el.innerHTML = c.map((x) => "<span>" + x + "</span>").join("");
+  el.hidden = !c.length;
+}
 
 // ------------------------------------------------------------------ chạy việc
 
@@ -350,7 +514,8 @@ $("chay").onclick = async () => {
       $("thanh-tien").style.width = (p * 100).toFixed(1) + "%";
       datTrangThai(`Uploading ${nhan} ${Math.round(p * 100)}%  (${i}/${n})`, false);
     };
-    const ma_tep = await taiLen(tep, bao("track"));
+    // Đã tải sẵn lúc chọn file thì dùng lại, khỏi tải hai lần.
+    const ma_tep = maTepDaTai || await taiLen(tep, bao("track"));
     const ma_mau = tepMau ? await taiLen(tepMau, bao("reference")) : "";
 
     const fd = new FormData();
@@ -359,6 +524,7 @@ $("chay").onclick = async () => {
     fd.append("mode", cheDo);
     fd.append("lufs", String(dichLufs));
     fd.append("auto", $("tu-dong").checked ? "true" : "false");
+    fd.append("tay", [...tayKeo].join(","));
     THANH.forEach((k) => fd.append(k, $(k).value));
 
     datTrangThai("Starting", false);
@@ -421,8 +587,14 @@ async function veKetQua(kq) {
   const tc = $("tu-chon");
   if (kq.auto) {
     const a = kq.auto;
-    tc.innerHTML = "Auto: measured <b>" + a.lufs_vao + " LUFS</b>, aimed at <b>"
-      + a.dich + "</b>, pushed <b>" + (a.day > 0 ? "+" : "") + a.day + " dB</b>.";
+    // Hai câu khác nhau, vì hai quyết định khác nhau. Nói "pushed +0.0 dB"
+    // khi tool CỐ Ý không đụng vào độ lớn thì người đọc tưởng nó tính sai.
+    tc.innerHTML = a.da_master
+      ? "Auto: this is already a master (<b>" + a.lufs_vao + " LUFS</b>, <b>"
+        + a.dr_vao + " dB</b> dynamics). Left as it is — only the peak ceiling "
+        + "was brought to −1 dBTP. Feed the mix instead to get a full master."
+      : "Auto: measured <b>" + a.lufs_vao + " LUFS</b>, aimed at <b>"
+        + a.dich + "</b>, pushed <b>" + (a.day > 0 ? "+" : "") + a.day + " dB</b>.";
     tc.hidden = false;
   } else {
     tc.hidden = true;
@@ -437,6 +609,12 @@ async function veKetQua(kq) {
   // Ngưỡng cũ là `lufs > -16 && dr < 11` — rộng tới mức mọi bản mix bình
   // thường đều dính, nên nó bắn cảnh báo "đây đã là bản master" vào đúng thứ
   // mà tool sinh ra để xử lý. Đã thấy nó bắn nhầm vào một bản mix -13,51 LUFS.
+  // Đợt tự chỉnh thứ hai: nhóm VOCAL, giờ mới có số vì stem vừa tách xong.
+  if (kq.auto_vocal) {
+    datNhom("vocal", kq.auto_vocal.thanh);
+    if (kq.auto_vocal.bo_qua) hienSoDo(null, kq.auto_vocal.bo_qua);
+  }
+
   const daMaster = kq.before.lufs > -11.5 && kq.before.dr < 8.5;
   const matDR = kq.before.dr - kq.after.dr;
   const canh = $("canh-bao");

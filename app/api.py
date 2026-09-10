@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
-from . import config, jobs, chain, khoa, tai_len, tinh
+from . import config, jobs, chain, khoa, tai_len, tinh, tu_chinh
 from . import audio as A
 
 app = FastAPI(title="Mastering")
@@ -35,6 +35,18 @@ async def api_upload(
                              await file.read())
 
 
+@app.post("/api/phan-tich")
+async def api_phan_tich(audio_ma: str = Form(""), audio: UploadFile = File(None)):
+    """Đo bản phối rồi trả về mức đề nghị cho nhóm MASTER.
+
+    Chỉ đọc file và chạy FFT nên xong trong vài giây — chạy được ngay lúc người
+    dùng vừa chọn file, chưa bấm gì. Nhóm VOCAL không có ở đây vì muốn đo giọng
+    thì phải tách stem, mà tách stem mất 20-30 giây; phần đó đi kèm lúc xử lý.
+    """
+    dich = await tai_len.lay_file(config.UPLOAD, audio_ma, audio, jobs.tao())
+    return tu_chinh.phan_tich_mix(dich)
+
+
 @app.post("/api/master")
 async def api_master(
     audio_ma: str = Form(""),
@@ -54,6 +66,10 @@ async def api_master(
     lufs: float = Form(-14),
     tone: float = Form(100),
     auto: bool = Form(False),
+    # Tên các thanh mà người dùng đã tự kéo, cách nhau bằng dấu phẩy. Tool
+    # không đè lên những thanh đó. Không có danh sách này thì đợt tự chỉnh thứ
+    # hai sẽ xoá mất chỉnh tay của người dùng ngay trước mắt họ.
+    tay: str = Form(""),
 ):
     ma = jobs.tao()
     dich = await tai_len.lay_file(config.UPLOAD, audio_ma, audio, ma)
@@ -67,6 +83,7 @@ async def api_master(
                 "space": space, "deess": deess, "warmth": warmth,
                 "vocal_gain": vocal_gain, "bass": bass, "air": air,
                 "width": width, "tone": tone, "auto": auto,
+                "tay": [k for k in tay.split(",") if k],
                 "lufs": lufs, "reference": f_mau}
 
     def viec(bao):
@@ -84,6 +101,7 @@ async def api_master(
             "duration": A.thoi_luong(str(dich)),
             "has_vocal": kq["vocal"] is not None,
             "auto": kq.get("tu_dong"),
+            "auto_vocal": kq.get("tu_chinh_giong"),
         }
 
     jobs.chay(ma, viec)

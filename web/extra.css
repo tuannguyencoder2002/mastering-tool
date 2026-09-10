@@ -146,3 +146,96 @@
   margin: 0 0 14px;
 }
 .tu-chon b { color: var(--chu); font-weight: 600; }
+
+/* ------------------------------------------------ tự chỉnh thanh kéo
+
+   Thẻ "Auto-master" nằm ngay cạnh tên nhóm, không phải một dòng chữ riêng cho
+   mỗi thanh: năm dòng chữ "auto" trong một cột hẹp là rác, một cái thẻ cho cả
+   nhóm nói đúng chừng ấy thông tin.
+
+   Sáng lên khi cả nhóm đang ở mức tool tự chọn; mờ đi ngay khi người dùng kéo
+   tay bất kỳ thanh nào trong nhóm. */
+.the-auto {
+  margin-left: 8px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .3px;
+  text-transform: none;
+  padding: 1px 6px;
+  border-radius: 20px;
+  border: 1px solid var(--vien);
+  color: #4e4e57;
+  transition: color .25s, border-color .25s, background .25s;
+}
+
+.the-auto.bat {
+  color: var(--nhan2);
+  border-color: #3b3480;
+  background: rgba(110, 99, 242, .12);
+}
+
+/* Dãy số ĐO ĐƯỢC, hiện dưới tên file.
+   Hiện số đo chứ không chỉ hiện kết quả: đây là thứ làm người dùng tin đang
+   dùng một thiết bị đo, không phải một cái nút may rủi. */
+.so-do-file {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.so-do-file span {
+  font-size: 10px;
+  color: var(--mo);
+  background: var(--nen);
+  border: 1px solid var(--vien);
+  border-radius: 20px;
+  padding: 1px 7px;
+  font-variant-numeric: tabular-nums;
+  animation: hien-len .3s ease both;
+}
+
+@keyframes hien-len {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Vạch đánh dấu mức tool đã chọn, nằm trên rãnh trượt.
+   Kéo đi đâu vẫn thấy tool chọn mức nào, và bấm vào vạch là về lại đúng đó.
+   Thiếu chi tiết này thì kéo một cái là mất luôn gợi ý, và lần sau không ai
+   dám để tool tự chỉnh nữa. */
+.keo { position: relative; }
+
+.keo .moc {
+  position: absolute;
+  /* Rãnh trượt cao 3px và nằm ở đáy nhãn, nên -3px đưa vạch 9px vào giữa rãnh */
+  bottom: -3px;
+  width: 2px;
+  height: 9px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--nhan);
+  opacity: .55;
+  cursor: pointer;
+  transition: opacity .2s, transform .2s;
+}
+
+.keo .moc::after {          /* vùng bấm rộng hơn nét vẽ, 2px thì không ai bấm trúng */
+  content: "";
+  position: absolute;
+  inset: -6px -7px;
+}
+
+.keo .moc:hover { opacity: 1; transform: scaleY(1.35); }
+
+/* Số bên phải thanh, lúc đang chạy hiệu ứng thì đổi màu để mắt bám theo */
+.keo b.dang-chay { color: var(--nhan2); }
+
+/* Máy nào bật "giảm chuyển động" thì bỏ hết hiệu ứng: thanh nhảy thẳng tới
+   đích. Vài người thấy chóng mặt với chuyển động, và Windows có sẵn công tắc
+   này trong phần Trợ năng. */
+@media (prefers-reduced-motion: reduce) {
+  .so-do-file span { animation: none; }
+  .keo .moc { transition: none; }
+}

@@ -13,7 +13,7 @@ from typing import Callable, Optional
 
 import numpy as np
 
-from . import config, dsp
+from . import config, dsp, tu_chinh
 from . import audio as A
 from .separate import tach_giong
 
@@ -49,20 +49,49 @@ def _bao(f, p, m):
         f(p, m)
 
 
-def dich_tu_chon(x, sr) -> dict:
-    """Đo bài rồi trả về đích và lượng phải đẩy.
+# Ngưỡng nhận ra "file này đã là bản master rồi", đặt theo SỐ ĐO.
+#
+# Năm bản mix của khách nằm ở -12,5 tới -14,9 LUFS, dải động 7,6-10,0 dB. Năm
+# bản master tương ứng nằm ở -9,6 tới -10,9 LUFS, dải động 6,0-8,5 dB. Hai nhóm
+# tách nhau rõ ở mốc -11,5 LUFS, và phải đòi CẢ hai điều kiện — chỉ nhìn độ lớn
+# thì một bản mix to sẵn cũng bị coi nhầm là master.
+DA_MASTER_LUFS = -11.5
+DA_MASTER_DR = 8.5
 
-    Đây là chỗ "tool tự lựa mức độ cho từng bài": lượng đẩy KHÔNG cố định, nó
-    bằng đích trừ mức đo được. Trên năm bản mix của khách, MasteringBox đẩy từ
-    +2,09 tới +5,31 dB — cùng một đích, năm lượng khác nhau. Cộng một lượng cố
-    định là sai ngay từ nguyên tắc.
+
+def dich_tu_chon(x, sr) -> dict:
+    """Đo bài rồi quyết định nhắm tới đâu và phải đẩy bao nhiêu.
+
+    Đây là chỗ "tool tự lựa mức độ cho từng bài". Hai quyết định:
+
+    1. LƯỢNG ĐẨY. Không cố định — bằng đích trừ mức đo được. Trên năm bản mix
+       của khách, MasteringBox đẩy từ +2,09 tới +5,31 dB để cùng về một đích;
+       chênh nhau 3,2 dB. Cộng một lượng cố định là sai ngay từ nguyên tắc.
+
+    2. CÓ ĐẨY HAY KHÔNG. File đưa vào mà đã là bản master rồi thì giữ nguyên độ
+       lớn của nó, chỉ cân phổ và chốt trần đỉnh. Trước đây Auto kéo mọi thứ về
+       -10,2 bất kể: đưa một bản master -8 LUFS vào là bị hạ 2,2 dB, mà người
+       dùng không hề yêu cầu chuyện đó. Giao diện có cảnh báo, nhưng cảnh báo
+       không ngăn được việc đã làm rồi.
+
+    Còn tỉ lệ nén và đường cong phổ thì CỐ ĐỊNH, và đó là chủ ý:
+      - Đường cong: đo được MasteringBox gần như không kéo từng bài về dáng
+        riêng (lệch chuẩn giữa năm bài 2,50 -> 2,33 dB sau xử lý).
+      - Tỉ lệ nén: dải động vào và dải động họ trả ra tương quan +0,952, nhưng
+        dùng hồi quy tốt nhất từ đó vẫn còn sai số 0,24 dB, trong khi tỉ lệ cố
+        định hiện tại đã đạt 0,27 dB. Đổi 0,03 dB lấy một cơ chế tự chỉnh là
+        thêm chỗ hỏng chứ không thêm chất lượng.
     """
     do = dsp.do_lufs(x, sr)
+    dr = dsp.do_dai_dong(x, sr)
+    da_master = do > DA_MASTER_LUFS and dr < DA_MASTER_DR
+    dich = round(do, 2) if da_master else DICH_TU_DONG
     return {
         "lufs_vao": round(do, 2),
-        "dich": DICH_TU_DONG,
-        "day": round(DICH_TU_DONG - do, 2),
-        "dr_vao": round(dsp.do_dai_dong(x, sr), 2),
+        "dich": dich,
+        "day": round(dich - do, 2),
+        "dr_vao": round(dr, 2),
+        "da_master": da_master,
     }
 
 
@@ -162,8 +191,11 @@ def master(x, sr, dich_lufs=-14.0, bai_mau: Optional[Path] = None, bao=None,
     # lấy đi 2,39 dB dải động, trong khi cả khâu chuẩn độ lớn (gồm hạn đỉnh)
     # chỉ lấy 0,19 dB. Tôi từng đổ cho bộ hạn đỉnh và trần -1 dBTP; số đo bác
     # bỏ điều đó.
-    y = dsp.nen(y, sr, nguong_db=-18.0, ti_le=nen_ti_le, nhanh_ms=30.0,
-                cham_ms=200.0, goc_db=nen_goc, bu_db=1.0)
+    # ti_le = 1 nghĩa là KHÔNG nén. Bỏ hẳn lời gọi thay vì để nó chạy không:
+    # tỉ lệ 1 vẫn cộng bu_db, và vẫn tốn một lượt duyệt cả bài.
+    if nen_ti_le > 1.001:
+        y = dsp.nen(y, sr, nguong_db=-18.0, ti_le=nen_ti_le, nhanh_ms=30.0,
+                    cham_ms=200.0, goc_db=nen_goc, bu_db=1.0)
     _bao(bao, 0.7, "Loudness")
     if dich_lufs is None:
         return dsp.han_dinh(y, sr, tran_db=tran_db)
@@ -226,6 +258,7 @@ def xu_ly(duong_dan: Path, tuy_chon: dict, bao: Optional[Callable] = None) -> di
     dich = None if dich is None else float(dich)
     bai_mau = tuy_chon.get("reference")
     tu_chon = bool(tuy_chon.get("auto", False))
+    tay = set(tuy_chon.get("tay") or ())      # thanh người dùng đã tự kéo
     # Cân phổ mạnh tay bao nhiêu. 1.0 = đúng đường cong đo được. Có nút riêng
     # để ai muốn nhẹ hơn thì hạ, chứ không khoá cứng.
     do_manh_pho = float(tuy_chon.get("tone", 100)) / 100.0
@@ -252,6 +285,7 @@ def xu_ly(duong_dan: Path, tuy_chon: dict, bao: Optional[Callable] = None) -> di
 
     # Tự chọn đích: đo bài rồi lấy đích đã đo từ các bản master của khách.
     tu_dong = None
+    tu_chinh_giong = None
     # `lufs=None` là lệnh CỐ Ý của chế độ album: đừng chuẩn hoá độ lớn ở đây,
     # để lượt hai xử lý cả album cùng lúc. Lệnh đó phải thắng Auto, không thì
     # bật Auto là album bị chuẩn hoá từng bài và mất hết chênh lệch độ to mà
@@ -259,6 +293,16 @@ def xu_ly(duong_dan: Path, tuy_chon: dict, bao: Optional[Callable] = None) -> di
     if tu_chon and tuy_chon.get("lufs", -14) is not None:
         tu_dong = dich_tu_chon(goc, sr)
         dich = tu_dong["dich"]
+        if tu_dong["da_master"]:
+            # File đã là bản master: đụng vào càng ít càng tốt. Bỏ luôn cân phổ
+            # và nén tổng, chỉ chốt trần đỉnh.
+            #
+            # Đường cong cân phổ được dò ra để bù sai lệch của dây chuyền khi
+            # đầu vào là bản MIX. Áp nó lên một bản đã master là chồng thêm một
+            # độ nghiêng thứ hai. Còn nén tổng lên bản đã nén là nén hai lần —
+            # đo được nó lấy thêm 0,8 dB dải động mà không đổi lại được gì.
+            do_manh_pho = 0.0
+            nen = (1.0, nen[1])
 
     ten = _ma_bam(duong_dan)
     thu_muc = config.OUT / ten
@@ -270,6 +314,31 @@ def xu_ly(duong_dan: Path, tuy_chon: dict, bao: Optional[Callable] = None) -> di
                           giu_nhac_nen=True)
         v = (A.doc(str(stem["vocals"]), sr, mono=False) * he_so_truoc).astype(np.float32)
         n = (A.doc(str(stem["no_vocals"]), sr, mono=False) * he_so_truoc).astype(np.float32)
+
+        # Đợt tự chỉnh thứ hai. Tới đây mới làm được, vì trước khi tách stem thì
+        # không có cách nào biết giọng đang dày hay mỏng, to hay chìm.
+        #
+        # Thanh nào người dùng đã tự kéo thì KHÔNG đè lên. Đè lên là xoá chỉnh
+        # tay của họ ngay trước mắt, và lần sau không ai dám động vào thanh nào
+        # nữa.
+        if tu_chon:
+            _bao(bao, 0.52, "Reading the vocal")
+            g = tu_chinh.phan_tich_giong(v, n)
+            tu_chinh_giong = {"do": g["do"], "thanh": {}}
+            for k, gt in g["thanh"].items():
+                if k in tay:
+                    continue
+                tu_chinh_giong["thanh"][k] = gt
+                if k == "thickness":
+                    day = gt / 100.0
+                elif k == "presence":
+                    sang = gt / 100.0
+                elif k == "space":
+                    khong_gian = gt / 100.0
+                elif k == "deess":
+                    khu = gt / 100.0
+                elif k == "vocal_gain":
+                    muc_giong = gt
 
         _bao(bao, 0.55, "Thickening vocal")
         v = day_giong(v, sr, day=day, sang=sang, khong_gian=khong_gian,
@@ -307,4 +376,5 @@ def xu_ly(duong_dan: Path, tuy_chon: dict, bao: Optional[Callable] = None) -> di
         "wav": f_wav, "mp3": f_mp3,
         "vocal": (thu_muc / "vocal_processed.wav") if che_do == "full" else None,
         "truoc": truoc, "sau": sau, "tu_dong": tu_dong,
+        "tu_chinh_giong": tu_chinh_giong,
     }
