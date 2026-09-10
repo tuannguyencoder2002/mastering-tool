@@ -256,7 +256,7 @@ const may = (() => {
  * 20-30 giây. File giao cho khách vẫn do máy chủ render.
  */
 const kho = {
-  vocal: null, nhac: null, loc: null, buGiong: 0, k: null,
+  vocal: null, nhac: null, loc: null, locNho: null, buGiong: 0, k: null,
   san() { return !!(this.vocal && this.nhac && this.loc); },
 
   /** Đặt mọi thanh lên đồ thị. Gọi cả lúc dựng lẫn lúc người dùng kéo. */
@@ -293,6 +293,55 @@ const kho = {
     k.nguonNhac.start(ts, Math.min(off, this.nhac.duration - 0.01));
     this.k = k;
     return k;
+  },
+
+  /** Vẽ lại sóng dòng After bằng cách render offline qua chính chuỗi này.
+   *
+   *  Render ở tần số hạ 8 lần (6 kHz): cả bài mất 643 ms thay vì 4,66 giây ở
+   *  tần số gốc — đo trên máy này. Đường bao sóng chỉ cần độ phân giải 10 ms
+   *  nên 6 kHz là quá đủ; phần trên 3 kHz mất đi không nhìn thấy trên hình.
+   *
+   *  Đệm stem đưa thẳng vào ngữ cảnh tần số thấp, để BufferSource tự hạ tần —
+   *  tự lấy mẫu thưa bằng tay thì sinh méo gập và đường bao lởm chởm.
+   */
+  dangVe: false,
+  hengVe: null,
+  veLai() {
+    if (!this.san() || !this.locNho) return;
+    clearTimeout(this.hengVe);
+    // Chờ 300 ms sau cú kéo cuối: kéo một cái phát ra hàng chục sự kiện, render
+    // theo từng cái là máy nghẹn mà mắt cũng không kịp thấy.
+    this.hengVe = setTimeout(async () => {
+      if (this.dangVe) return;
+      this.dangVe = true;
+      try {
+        const sr = this.locNho.sampleRate;
+        const dai = Math.min(this.vocal.duration, this.nhac.duration);
+        const ctx = new OfflineAudioContext(2, Math.floor(dai * sr), sr);
+        const k = Chuoi.dung(ctx, this.vocal, this.nhac, this.locNho, 0);
+        this.apDung(k);
+        // Bỏ phần bù độ to: sóng đã tự co giãn theo thanh Loudness khi vẽ,
+        // cộng vào đây nữa là nhân hai lần.
+        k.doTo.gain.value = 1;
+        k.ra.connect(ctx.destination);
+        k.nguonVocal.start(0);
+        k.nguonNhac.start(0);
+        const ra = await ctx.startRendering();
+        const x = ra.getChannelData(0);
+        const buoc = Math.max(1, Math.round(sr * MS_MOI_COT / 1000));
+        const cot = Math.floor(x.length / buoc);
+        const d = new Float32Array(cot);
+        for (let i = 0; i < cot; i++) {
+          let m = 0;
+          const a = i * buoc, b = a + buoc;
+          for (let j = a; j < b; j++) { const v = Math.abs(x[j]); if (v > m) m = v; }
+          d[i] = m;
+        }
+        dinh.mastered = d;
+        veSong();
+      } catch (e) { /* vẽ lại hỏng thì giữ nguyên hình cũ, không chặn gì */ }
+      this.dangVe = false;
+    }, 300);
   },
 
   ngat() {
@@ -405,6 +454,7 @@ $("lufs").oninput = () => {
   const lech = dichLufs - lufsDaDung;
   // Độ to đi qua chuỗi khi chuỗi đang chạy, còn không thì dùng đường bù cũ.
   if (kho.san()) kho.apDung(kho.k); else may.buDoTo(lech);
+  // Thanh độ to KHÔNG cần render lại: sóng đã co giãn theo hệ số ngay lúc vẽ.
   veSong();                     // hình phải đổi theo tiếng
   // Cập nhật luôn con số LUFS trên khối kết quả, không thì nó nói một đằng mà
   // tai nghe một nẻo.
@@ -485,6 +535,7 @@ THANH.forEach((k) => {
     boPreset();
     danhDauTay(k);            // người dùng vừa kéo tay -> tool đừng đè lên nữa
     kho.apDung(kho.k);        // và nghe ngay, không đợi bấm Process
+    kho.veLai();              // hình cũng phải đổi theo
   };
   veThanh(k);
   if (THANG[k]) veThangDo(k, THANG[k]);
@@ -808,15 +859,21 @@ async function veKetQua(kq) {
     try {
       const c = may.ctx();
       const lay = async (u) => c.decodeAudioData(await (await fetch(u)).arrayBuffer());
-      const [v, nh, lc] = await Promise.all([
+      const [v, nh, lc, lcNho] = await Promise.all([
         lay("/api/audio/" + maViec + "?kind=stem_vocal"),
         lay("/api/audio/" + maViec + "?kind=stem_nhac"),
         fetch("/api/loc?che_do=" + cheDo + "&sr=" + c.sampleRate)
           .then((r) => r.json()),
+        // Bản lọc ở tần số hạ 8 lần, dành riêng cho lượt render vẽ lại sóng.
+        fetch("/api/loc?che_do=" + cheDo + "&sr=" + Math.round(c.sampleRate / 8))
+          .then((r) => r.json()),
       ]);
       const bl = c.createBuffer(1, lc.he_so.length, lc.sr);
       bl.copyToChannel(Float32Array.from(lc.he_so), 0);
-      kho.vocal = v; kho.nhac = nh; kho.loc = bl;
+      const blNho = c.createBuffer(1, lcNho.he_so.length, lcNho.sr);
+      blNho.copyToChannel(Float32Array.from(lcNho.he_so), 0);
+      kho.vocal = v; kho.nhac = nh; kho.loc = bl; kho.locNho = blNho;
+      kho.veLai();
     } catch (e) { /* không có chuỗi sống thì vẫn dùng bản đã render */ }
   })();
 
@@ -1097,7 +1154,14 @@ function veSong() {
       }
     }
   };
-  const heSong = may.heBu();
+  // Hệ số co giãn sóng cho bản đã xử lý.
+  //
+  // Khi chuỗi sống chạy thì độ to nằm trong chuỗi, không đi qua may.buDoTo()
+  // nữa — lấy heBu() lúc đó là luôn ra 1 và sóng đứng im dù kéo Loudness. Tính
+  // thẳng từ thanh cho chắc.
+  const heSong = kho.san() && lufsDaDung !== null
+    ? Math.pow(10, (+$("lufs").value - lufsDaDung) / 20)
+    : may.heBu();
   DONG.forEach((d, i) => {
     const y0 = dinhDong(i);
     const dang = d.k === dangNghe;
