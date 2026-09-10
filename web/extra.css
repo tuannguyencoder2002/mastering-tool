@@ -239,3 +239,17 @@
   .so-do-file span { animation: none; }
   .keo .moc { transition: none; }
 }
+
+/* Thanh độ to nghe được ngay khi kéo, nên nó không giống mấy thanh khác:
+   kéo là ĐỔI TIẾNG LUÔN, không phải đợi bấm Process. Cho nó một chút nhấn để
+   phân biệt. */
+#o-lufs b { color: var(--nhan2); }
+
+/* Kéo quá xa mức đã dựng thì bản nghe thử không còn giống bản sẽ xuất ra:
+   phần vượt trần chỉ được nén thô ở trình duyệt. Nói ra chứ không giấu. */
+.nhac-dung {
+  font-size: 10.5px;
+  color: var(--vua);
+  margin: -6px 0 10px;
+  min-height: 14px;
+}

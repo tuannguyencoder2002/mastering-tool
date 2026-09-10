@@ -6,7 +6,7 @@ let tep = null;       // bài cần xử lý
 let tepMau = null;    // bài mẫu để so phổ (tuỳ chọn)
 let maViec = null;
 let cheDo = "full";
-let dichLufs = -14;
+let dichLufs = -10;
 let soDo = null;      // LUFS trước/sau, để cân mức khi so A/B
 let dinh = {};        // đỉnh sóng theo từng bản, vẽ lại khi đổi A/B
 
@@ -41,6 +41,8 @@ const may = (() => {
   let t0 = 0;                // ctx.currentTime lúc bấm phát
   let viTri = 0;             // mốc trong bài lúc bấm phát
   const he = {};             // hệ số cân mức từng bản
+  let bu = 1.0;              // hệ số bù độ to, chỉ áp cho bản ĐÃ XỬ LÝ
+  let han = null;            // khối hạn đỉnh thô cho bản nghe thử
   let khiDoi = null;         // gọi lại khi phát/dừng, để đổi chữ trên nút
 
   // 20 ms: đủ dài để không nghe ra tiếng tách, đủ ngắn để tai coi là tức thì.
@@ -54,6 +56,14 @@ const may = (() => {
       ctx = new C();
     }
     return ctx;
+  }
+
+  /** Mức cuối của một bản = cân mức × bù độ to.
+   *
+   *  Bù độ to KHÔNG áp cho bản gốc: bản gốc là mốc để so, kéo nó theo thì
+   *  chẳng còn gì để so nữa. */
+  function mucCuoi(k) {
+    return (he[k] === undefined ? 1 : he[k]) * (k === "original" ? 1 : bu);
   }
 
   function dat(k, gt, tuc_thi) {
@@ -103,10 +113,27 @@ const may = (() => {
       dem[k] = buf;
       if (!num[k]) {
         num[k] = c.createGain();
-        num[k].connect(c.destination);
+        // Bản đã xử lý đi qua một khối hạn đỉnh thô trước khi ra loa. Kéo độ
+        // to lên cao là đỉnh vượt trần; không có khối này thì bản nghe thử cứ
+        // to mãi một cách sạch sẽ, còn file xuất ra thì bị hạn đỉnh nén lại —
+        // nghe thử một đằng, nhận file một nẻo.
+        if (k === "original") {
+          num[k].connect(c.destination);
+        } else {
+          if (!han) {
+            han = c.createDynamicsCompressor();
+            han.threshold.value = -1;
+            han.knee.value = 0;
+            han.ratio.value = 20;
+            han.attack.value = 0.003;
+            han.release.value = 0.08;
+            han.connect(c.destination);
+          }
+          num[k].connect(han);
+        }
       }
       if (he[k] === undefined) he[k] = 1;
-      num[k].gain.value = (k === dangNghe) ? he[k] : 0;
+      num[k].gain.value = (k === dangNghe) ? mucCuoi(k) : 0;
       // Bản này giải mã xong SAU khi đã bấm Play thì nó chưa có nguồn nào
       // chạy — đổi sang là im tiếng. Cho nó nhập làn ngay, khớp đúng mốc mà
       // hai bản kia đang ở.
@@ -120,8 +147,10 @@ const may = (() => {
     },
 
     co(k) { return !!dem[k || dangNghe]; },
-    // Chỉ để phép thử soi được: bản này có nguồn đang chạy hay không.
+    // Chỉ để phép thử soi được: bản này có nguồn đang chạy hay không,
+    // và hệ số đang thực sự nhân vào tín hiệu ra loa.
     _chan(k) { return !!nguon[k]; },
+    _mucRaLoa(k) { return num[k] ? num[k].gain.value : null; },
     dai() { return dem[dangNghe] ? dem[dangNghe].duration : 0; },
     dangPhat() { return chay; },
     gio() {
@@ -174,7 +203,17 @@ const may = (() => {
       const cu = dangNghe;
       dangNghe = k;
       dat(cu, 0);
-      dat(k, he[k]);
+      dat(k, mucCuoi(k));
+    },
+
+    /** Bù độ to theo dB, nghe thấy ngay. Đây là chỗ duy nhất trong tool đổi
+     *  được tiếng mà không phải chạy lại DSP: độ to là một phép nhân trên bản
+     *  đã giải mã sẵn, còn LUFS là số đo trung bình nên cộng bao nhiêu dB vào
+     *  thì LUFS dịch đúng bấy nhiêu. */
+    buDoTo(db) {
+      bu = Math.pow(10, db / 20);
+      if (!ctx) return;
+      Object.keys(dem).forEach((k) => dat(k, k === dangNghe ? mucCuoi(k) : 0));
     },
 
     /** Hạ bản to xuống cho bằng bản nhỏ, hoặc thả về nguyên mức. */
@@ -184,7 +223,7 @@ const may = (() => {
       he.mastered = bat && lech > 0 ? hs : 1;
       he.vocal = 1;
       if (!ctx) return;
-      Object.keys(dem).forEach((k) => dat(k, k === dangNghe ? he[k] : 0));
+      Object.keys(dem).forEach((k) => dat(k, k === dangNghe ? mucCuoi(k) : 0));
     },
   };
 })();
@@ -274,21 +313,45 @@ $("che-do").onclick = (e) => {
     : "Masters the mix as it is. Nothing can touch the vocal alone.";
 };
 
-$("do-lon").onclick = (e) => {
-  const v = e.target.dataset.lufs;
-  if (!v) return;
-  dichLufs = +v;
-  [...$("do-lon").children].forEach((b) => b.classList.toggle("chon", b.dataset.lufs === v));
+// Mức độ to của bản ĐÃ DỰNG. Kéo thanh đi chỗ khác thì chênh lệch được bù
+// ngay trên đường phát, còn con số này chỉ đổi khi bấm Process lại.
+let lufsDaDung = null;
+
+function veLufs() {
+  $("v-lufs").textContent = (+$("lufs").value).toFixed(1) + " LUFS";
+}
+
+/** Kéo thanh độ to: nghe thấy NGAY, không đợi chạy lại. */
+$("lufs").oninput = () => {
+  dichLufs = +$("lufs").value;
+  tayKeo.add("lufs");           // kéo tay -> Auto không đè lên nữa
+  veLufs();
+  if (lufsDaDung === null) return;
+  const lech = dichLufs - lufsDaDung;
+  may.buDoTo(lech);
+  // Cập nhật luôn con số LUFS trên khối kết quả, không thì nó nói một đằng mà
+  // tai nghe một nẻo.
+  if (soDo) {
+    $("sl-lufs").textContent = (soDo.after.lufs + lech).toFixed(2);
+    veNhanCanMuc(lech);
+  }
+  // Kéo xa quá thì bản nghe thử không còn giống bản sẽ xuất ra nữa.
+  $("nhac-dung").textContent = Math.abs(lech) > 1.2
+    ? "Preview only — press Process to render at this level"
+    : "";
 };
+veLufs();
 
 // Auto bật thì hàng nút LUFS mờ đi nhưng KHÔNG bị ẩn: người dùng vẫn thấy
 // mức nào đang được nhắm, và bỏ tích là lấy lại quyền ngay tại chỗ.
 function capNhatAuto() {
   const bat = $("tu-dong").checked;
-  $("do-lon").classList.toggle("tat", bat);
+  // KHÔNG khoá thanh độ to khi bật Auto. Nó là thanh duy nhất nghe được ngay
+  // khi kéo, khoá nó lại là chặn đúng thao tác đáng giá nhất. Kéo tay thì
+  // được ưu tiên, y như mọi thanh khác trong Auto-master.
   $("ghi-lufs").textContent = bat
     ? "Auto aims at −10.2 LUFS, measured from your reference masters. Untick to set the target yourself."
-    : "Target LUFS. −14 is the streaming standard.";
+    : "Target LUFS. −11 … −7 is the range MasteringBox offers; −14 is the streaming standard.";
 }
 $("tu-dong").onchange = capNhatAuto;
 capNhatAuto();
@@ -609,6 +672,14 @@ async function veKetQua(kq) {
   // Ngưỡng cũ là `lufs > -16 && dr < 11` — rộng tới mức mọi bản mix bình
   // thường đều dính, nên nó bắn cảnh báo "đây đã là bản master" vào đúng thứ
   // mà tool sinh ra để xử lý. Đã thấy nó bắn nhầm vào một bản mix -13,51 LUFS.
+  // Bản vừa dựng ở mức nào thì thanh về đúng đó, và bù độ to trở về 0.
+  lufsDaDung = kq.after.lufs;
+  $("lufs").value = Math.max(-11, Math.min(-7, lufsDaDung));
+  dichLufs = +$("lufs").value;
+  veLufs();
+  may.buDoTo(0);
+  $("nhac-dung").textContent = "";
+
   // Đợt tự chỉnh thứ hai: nhóm VOCAL, giờ mới có số vì stem vừa tách xong.
   if (kq.auto_vocal) {
     datNhom("vocal", kq.auto_vocal.thanh);
@@ -670,12 +741,28 @@ function danhDauAB() {
   [...$("ab").children].forEach((b) => b.classList.toggle("chon", b.dataset.kind === dangNghe));
 }
 
+/** Ghi thẳng con số đang bị bỏ đi cạnh ô Level-matched.
+ *
+ *  Ô này hạ bản to xuống cho bằng bản nhỏ — đúng về mặt thẩm định, nhưng nó
+ *  xoá luôn phần dễ nghe nhất, và người dùng không biết mình vừa tự bỏ đi bao
+ *  nhiêu. MasteringBox không cân mức, nên bật sẵn ô này là đem tool ra so ở
+ *  hai luật chơi khác nhau. */
+function veNhanCanMuc(bu) {
+  const el = $("nhan-cung-muc");
+  if (!el) return;
+  const lech = (soDo ? soDo.after.lufs - soDo.before.lufs : 0) + (bu || 0);
+  el.textContent = soDo && Math.abs(lech) >= 0.1
+    ? "Level-matched (After is " + (lech > 0 ? "+" : "") + lech.toFixed(1) + " dB)"
+    : "Level-matched";
+}
+
 function canMuc() {
   // So A/B mà một bản to hơn thì bản to hơn LUÔN nghe hay hơn, bất kể nó có
   // thật sự tốt hơn không — đó là bẫy tâm lý âm thanh kinh điển. Hạ bản to
   // xuống cho bằng bản nhỏ rồi hãy so.
   may.canMuc($("cung-muc").checked,
              soDo ? soDo.after.lufs - soDo.before.lufs : 0);
+  veNhanCanMuc();
 }
 
 $("cung-muc").onchange = canMuc;

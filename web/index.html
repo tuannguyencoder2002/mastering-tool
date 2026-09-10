@@ -45,14 +45,12 @@
         <label class="o-chon tu-dong" title="Measures the track, then picks the loudness target and the push for that track. Five reference masters landed between -9.6 and -10.9 LUFS, needing +2.1 to +5.3 dB each — one fixed amount cannot fit them all.">
           <input type="checkbox" id="tu-dong" checked> Auto target
         </label>
-        <div class="doi" id="do-lon">
-          <button data-lufs="-16">−16</button>
-          <button class="chon" data-lufs="-14">−14</button>
-          <button data-lufs="-11">−11</button>
-          <button data-lufs="-9">−9</button>
-        </div>
+        <label class="keo" id="o-lufs"><span>Loudness</span>
+          <b id="v-lufs">−10.0 LUFS</b>
+          <input type="range" id="lufs" min="-11" max="-7" step="0.1" value="-10"></label>
         <p class="ghi" id="ghi-lufs">Auto aims at −10.2 LUFS, measured from your
-        reference masters. Untick to set the target yourself.</p>
+        reference masters. Untick to set it yourself — you hear it as you drag.</p>
+        <p class="nhac-dung" id="nhac-dung"></p>
       </div>
 
       <div class="muc" id="khoi-giong">
@@ -140,7 +138,7 @@
           <span class="gio" id="gio">0:00 / 0:00</span>
           <span class="day"></span>
           <label class="o-chon" title="Play both at the same loudness so the louder one does not just sound better">
-            <input type="checkbox" id="cung-muc" checked> Level-matched
+            <input type="checkbox" id="cung-muc"> <span id="nhan-cung-muc">Level-matched</span>
           </label>
         </div>
         <div class="dieu-khien meo-hang">

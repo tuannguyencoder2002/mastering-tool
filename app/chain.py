@@ -290,7 +290,9 @@ def xu_ly(duong_dan: Path, tuy_chon: dict, bao: Optional[Callable] = None) -> di
     # để lượt hai xử lý cả album cùng lúc. Lệnh đó phải thắng Auto, không thì
     # bật Auto là album bị chuẩn hoá từng bài và mất hết chênh lệch độ to mà
     # tác giả cố ý tạo ra.
-    if tu_chon and tuy_chon.get("lufs", -14) is not None:
+    # "lufs" nằm trong danh sách kéo tay nghĩa là người dùng đã tự đặt mức độ
+    # to; Auto vẫn tự chỉnh mọi thứ khác nhưng không đụng vào đích nữa.
+    if tu_chon and "lufs" not in tay and tuy_chon.get("lufs", -14) is not None:
         tu_dong = dich_tu_chon(goc, sr)
         dich = tu_dong["dich"]
         if tu_dong["da_master"]:
