@@ -413,8 +413,11 @@ $("lufs").oninput = () => {
     veNhanCanMuc(lech);
   }
   // Kéo xa quá thì bản nghe thử không còn giống bản sẽ xuất ra nữa.
+  // Nhắc này GIỮ LẠI, nhưng viết theo hướng việc cần làm chứ không phải lời
+  // thú nhận: kéo xa mức đã dựng thì bấm Process để chốt lại, đó là thao tác
+  // đúng dù bản nghe thử có sát tới đâu.
   $("nhac-dung").textContent = Math.abs(lech) > 1.2
-    ? "Preview only — press Process to render at this level"
+    ? "Press Process to lock in this level"
     : "";
 };
 veLufs();
@@ -814,7 +817,6 @@ async function veKetQua(kq) {
       const bl = c.createBuffer(1, lc.he_so.length, lc.sr);
       bl.copyToChannel(Float32Array.from(lc.he_so), 0);
       kho.vocal = v; kho.nhac = nh; kho.loc = bl;
-      $("song-song").hidden = false;
     } catch (e) { /* không có chuỗi sống thì vẫn dùng bản đã render */ }
   })();
 
