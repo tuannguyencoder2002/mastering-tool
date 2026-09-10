@@ -349,25 +349,25 @@ button.nho { height: 26px; padding: 0 10px; font-size: 11.5px; }
 :root {
   --rail: 320px;
   --toi-da: 960px;
-  --song-cao: 92px;
+  --song-cao: 150px;
   --le: 16px;
 }
 
 @media (min-width: 1440px) {
-  :root { --rail: 340px; --toi-da: 1080px; --song-cao: 108px; --le: 18px; }
+  :root { --rail: 340px; --toi-da: 1080px; --song-cao: 172px; --le: 18px; }
 }
 
 @media (min-width: 1680px) {
-  :root { --rail: 360px; --toi-da: 1220px; --song-cao: 120px; --le: 20px; }
+  :root { --rail: 360px; --toi-da: 1220px; --song-cao: 190px; --le: 20px; }
 }
 
 @media (min-width: 1920px) {
-  :root { --rail: 384px; --toi-da: 1380px; --song-cao: 132px; --le: 24px; }
+  :root { --rail: 384px; --toi-da: 1380px; --song-cao: 208px; --le: 24px; }
   body { font-size: 13.5px; }
 }
 
 @media (min-width: 2400px) {
-  :root { --rail: 420px; --toi-da: 1560px; --song-cao: 150px; --le: 28px; }
+  :root { --rail: 420px; --toi-da: 1560px; --song-cao: 232px; --le: 28px; }
   body { font-size: 14px; }
 }
 
@@ -418,5 +418,5 @@ button.nho { height: 26px; padding: 0 10px; font-size: 11.5px; }
 
 /* Màn cao thì cho bảng lời/khối kết quả dùng thêm chiều dọc, khỏi cuộn vặt. */
 @media (min-height: 1000px) {
-  :root { --song-cao: 140px; }
+  :root { --song-cao: 216px; }
 }

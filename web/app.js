@@ -860,6 +860,7 @@ function nhip() {
 // Cửa sổ đang xem, tính bằng giây. Bằng cả bài lúc mới xử lý xong.
 let xemDau = 0;
 let xemDai = 0;
+let laneCua = null;      // (y) -> tên dòng đang trỏ vào, veSong() đặt lại
 
 // Đỉnh sóng lưu ở độ phân giải CAO chứ không theo bề rộng màn hình.
 //
@@ -935,8 +936,32 @@ function veSong() {
   chuanCuaSo();
 
   const CAO_THUOC = 16;
-  const caoSong = r.height - CAO_THUOC;
   const x = (t) => ((t - xemDau) / xemDai) * r.width;
+
+  // BA DÒNG RIÊNG, cùng một trục thời gian.
+  //
+  // Trước đây một khung vẽ bản đang nghe, bản gốc mờ nằm sau. Muốn so thì phải
+  // đổi qua đổi lại và nhớ bằng mắt. Ba dòng thì thấy cả ba cùng lúc, và cùng
+  // một vạch phát cắt dọc qua cả ba nên chắc chắn đang nhìn đúng một khoảnh
+  // khắc. Còn một lý do nữa: mấy thanh như Level đổi tiếng nhưng KHÔNG cập
+  // nhật được sóng tức thì (phải trộn lại mới biết), nên nhìn ba dòng cạnh
+  // nhau là cách duy nhất thấy được khác biệt mà không cần chuyển bản.
+  const DONG = [
+    { k: "original", ten: "Before", mau: "#4a4a58", sang: "#6b6b7a" },
+    { k: "mastered", ten: "After", mau: "#4b45a8", sang: "#6e63f2" },
+    { k: "vocal", ten: "Vocal", mau: "#2f6f57", sang: "#34d399" },
+  ].filter((d) => dinh[d.k] || d.k !== "vocal");
+  const KHE = 4;
+  const caoDong = (r.height - CAO_THUOC - KHE * (DONG.length - 1)) / DONG.length;
+  const dinhDong = (i) => CAO_THUOC + i * (caoDong + KHE);
+  laneCua = (py) => {
+    for (let i = 0; i < DONG.length; i++) {
+      if (py >= dinhDong(i) - KHE / 2 && py < dinhDong(i) + caoDong + KHE / 2) {
+        return DONG[i].k;
+      }
+    }
+    return null;
+  };
 
   // Vẽ bản gốc mờ phía sau, bản đang nghe đậm phía trước: chênh lệch dải động
   // giữa hai bản nhìn thấy được ngay, không cần nghe.
@@ -945,10 +970,11 @@ function veSong() {
   // Kéo độ to mà hình không nhúc nhích thì người dùng không tin là có gì đổi —
   // tai nghe một đằng, mắt thấy một nẻo. Đỉnh vượt khung bị cắt ngang, và đó
   // là thông tin thật: đúng chỗ bộ hạn đỉnh sẽ phải làm việc.
-  const ve = (d, mau, he) => {
+  const ve = (d, mau, he, y0, cao) => {
     if (!d) return;
     g.fillStyle = mau;
     const k = he || 1;
+    const caoSong = cao;
     const giay_moi_cot = MS_MOI_COT / 1000;
     const i0 = Math.max(0, Math.floor(xemDau / giay_moi_cot));
     const i1 = Math.min(d.length, Math.ceil((xemDau + xemDai) / giay_moi_cot));
@@ -961,22 +987,40 @@ function veSong() {
         const b = i0 + Math.floor((px + 1) * cot_moi_px);
         for (let i = a; i < b; i++) if (d[i] > m) m = d[i];
         const h = Math.min(1, m * k) * (caoSong * 0.92);
-        g.fillRect(px, CAO_THUOC + (caoSong - h) / 2, 1, h);
+        g.fillRect(px, y0 + (caoSong - h) / 2, 1, h);
       }
     } else {
       // Phóng tới mức một cột đỉnh rộng hơn một điểm ảnh: vẽ thành thanh.
       const w = r.width / (i1 - i0);
       for (let i = i0; i < i1; i++) {
         const h = Math.min(1, d[i] * k) * (caoSong * 0.92);
-        g.fillRect((i - i0) * w, CAO_THUOC + (caoSong - h) / 2,
+        g.fillRect((i - i0) * w, y0 + (caoSong - h) / 2,
                    Math.max(0.8, w - 0.3), h);
       }
     }
   };
   const heSong = may.heBu();
-  if (dangNghe !== "original") ve(dinh.original, "#2e2e38", 1);
-  ve(dinh[dangNghe], dangNghe === "original" ? "#4a4a58" : "#6e63f2",
-     dangNghe === "original" ? 1 : heSong);
+  DONG.forEach((d, i) => {
+    const y0 = dinhDong(i);
+    const dang = d.k === dangNghe;
+    // Dòng đang nghe: nền hơi sáng lên và sóng dùng màu đậm. Không viền, không
+    // khung — chỉ đủ để mắt biết mình đang nghe dòng nào.
+    if (dang) {
+      g.fillStyle = "#16161c";
+      g.fillRect(0, y0, r.width, caoDong);
+    }
+    ve(dinh[d.k], dang ? d.sang : d.mau,
+       d.k === "original" ? 1 : heSong, y0, caoDong);
+    // Nhãn cần nền tối phía sau. Dòng After dày đặc tới mức lấp kín khung, và
+    // chữ cùng tông với sóng thì mất hút — đã thấy đúng vậy khi chụp lại.
+    g.font = (dang ? "600 " : "") + "9.5px Inter, system-ui, sans-serif";
+    g.textBaseline = "top";
+    const wNhan = g.measureText(d.ten).width;
+    g.fillStyle = "rgba(11,11,13,0.72)";
+    g.fillRect(3, y0 + 2, wNhan + 8, 13);
+    g.fillStyle = dang ? d.sang : "#8b8b93";
+    g.fillText(d.ten, 7, y0 + 4);
+  });
 
   // Thước thời gian. Bước chia chọn theo CHỖ THẬT SỰ CÓ trên màn: đòi tối
   // thiểu 56 điểm ảnh cho mỗi nhãn rồi lấy bước nhỏ nhất còn vừa.
@@ -1059,7 +1103,15 @@ function veSong() {
     keo = {
       x0: e.clientX, dau0: xemDau, da_di: false,
       tua: py < 16 || Math.abs(px - px_vach) <= 7,
+      lane: laneCua ? laneCua(py) : null,
     };
+    // Đổi dòng ngay ở pointerdown, không đợi nhả tay.
+    //
+    // Để ở pointerup thì cú bấm rơi trúng vạch phát bị coi là "kéo vạch" và
+    // không đổi dòng — mà vạch phát nằm vắt qua CẢ BA dòng, nên chỗ đó là chỗ
+    // người ta hay bấm nhất. Đã dính thật khi chạy thử: bấm dòng 2 và 3 không
+    // ăn vì con trỏ đang ở đúng vạch.
+    if (keo.lane && keo.lane !== dangNghe) doiBan(keo.lane);
     c.setPointerCapture(e.pointerId);
     if (keo.tua) datGio(Math.max(0, Math.min(tongDai(), t)));
   });
