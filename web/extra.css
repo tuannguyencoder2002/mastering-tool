@@ -254,21 +254,23 @@
   min-height: 14px;
 }
 
-/* Thang mốc dưới thanh kéo. Chữ rất nhỏ và rất mờ: nó là cái để liếc, không
-   phải để đọc. Đậm hơn một chút là cả cột trái thành bảng số. */
+/* Thang mốc dưới thanh kéo. Đủ to và đủ đậm để liếc một cái là đọc được —
+   bản đầu tôi để 9px màu #55555e cho "nhã", nhưng nhã tới mức phải nheo mắt
+   thì cái thang coi như không có. */
 .keo .thang {
   grid-column: 1 / -1;
   position: relative;
-  height: 11px;
-  margin-top: 1px;
+  height: 14px;
+  margin-top: 2px;
 }
 
 .keo .thang i {
   position: absolute;
   transform: translateX(-50%);
-  font-size: 9px;
+  font-size: 10.5px;
+  font-weight: 600;
   font-style: normal;
-  color: #55555e;
+  color: #74747f;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
