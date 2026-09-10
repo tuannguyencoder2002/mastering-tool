@@ -931,13 +931,15 @@ async function veKetQua(kq) {
   dangNghe = "mastered";
   danhDauAB();
 
-  // Nạp bản đang nghe trước rồi mới tới bản gốc: bấm Play được ngay, không
-  // phải chờ giải mã xong cả hai.
-  await docDinh("mastered");
-  canMuc();
-  veSong();
-  await docDinh("original");
-  if (kq.has_vocal) await docDinh("vocal");
+  // Nạp CẢ BA rồi mới vẽ một lần.
+  //
+  // Trước đây vẽ ngay sau khi có bản After rồi mới nạp hai bản kia, nên xử lý
+  // xong là thấy một dòng sóng, vài giây sau mới nhảy thành ba — trông như
+  // giao diện đang lỗi. Ba việc này không phụ thuộc nhau nên chạy song song,
+  // tổng thời gian bằng cái lâu nhất chứ không phải tổng của ba.
+  await Promise.all(
+    ["mastered", "original"].concat(kq.has_vocal ? ["vocal"] : [])
+      .map((k) => docDinh(k)));
   canMuc();
   veSong();
 }
