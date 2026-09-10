@@ -143,7 +143,7 @@ def api_download(ma: str, fmt: str = "wav"):
 
 
 @app.get("/api/loc")
-def api_loc(che_do: str = "full"):
+def api_loc(che_do: str = "full", sr: int = 0):
     """Bộ lọc cân phổ dưới dạng chuỗi hệ số.
 
     Trình duyệt nạp thẳng cái này vào ConvolverNode, nên đường cong nghe thử
@@ -153,7 +153,14 @@ def api_loc(che_do: str = "full"):
     import numpy as np
     from scipy import signal as sg
     duong = dsp.DO_NGHIENG_GIONG if che_do == "full" else dsp.DO_NGHIENG
-    nyq = config.SR / 2.0
+    # Thiết kế ở ĐÚNG tần số lấy mẫu mà trình duyệt đang chạy.
+    #
+    # ConvolverNode đòi đệm xung cùng tần số với ngữ cảnh, mà ngữ cảnh lấy theo
+    # thiết bị — máy này ra 48 kHz trong khi tool làm việc ở 44,1. Ép dùng bộ
+    # lọc 44,1 ở ngữ cảnh 48 thì cả đường cong dịch đi 8,8% về phía cao, tức
+    # gần một cung rưỡi.
+    sr_that = int(sr) if sr and 8000 <= int(sr) <= 192000 else config.SR
+    nyq = sr_that / 2.0
     f, g_db = [0.0], [0.0]
     for fc, db in duong:
         if fc >= nyq:
@@ -164,7 +171,7 @@ def api_loc(che_do: str = "full"):
     g_db.append(g_db[-1])
     bac = dsp.BAC_CAN_PHO if dsp.BAC_CAN_PHO % 2 else dsp.BAC_CAN_PHO + 1
     h = sg.firwin2(bac, np.array(f) / nyq, 10 ** (np.array(g_db) / 20.0))
-    return {"sr": config.SR, "he_so": [round(float(x), 9) for x in h]}
+    return {"sr": sr_that, "he_so": [round(float(x), 9) for x in h]}
 
 
 @app.get("/api/health")

@@ -99,6 +99,7 @@ const may = (() => {
   function _ngat() {
     Object.values(nguon).forEach((x) => { try { x.stop(); } catch (_) {} });
     nguon = {};
+    kho.ngat();
     chay = false;
   }
 
@@ -146,7 +147,13 @@ const may = (() => {
       viTri = 0;
     },
 
-    co(k) { return !!dem[k || dangNghe]; },
+    co(k) {
+      const t = k || dangNghe;
+      if ((t === "mastered" || t === "vocal") && kho.san()) return true;
+      return !!dem[t];
+    },
+    /** Ngữ cảnh âm thanh, để chỗ khác nạp đệm và dựng chuỗi. */
+    ctx() { return may_ctx(); },
     // Chỉ để phép thử soi được: bản này có nguồn đang chạy hay không,
     // và hệ số đang thực sự nhân vào tín hiệu ra loa.
     _chan(k) { return !!nguon[k]; },
@@ -172,12 +179,20 @@ const may = (() => {
       // vài mẫu theo thứ tự khởi tạo.
       const t = c.currentTime + 0.03;
       Object.keys(dem).forEach((k) => {
+        // Bản gốc phát từ đệm; hai bản đã xử lý do chuỗi sống lo, nên không
+        // tạo nguồn cho chúng nữa.
+        if (k !== "original" && kho.san()) return;
         const src = c.createBufferSource();
         src.buffer = dem[k];
         src.connect(num[k]);
         src.start(t, Math.min(viTri, dem[k].duration - 0.01));
         nguon[k] = src;
       });
+      if (kho.san()) {
+        if (!num.mastered) { num.mastered = c.createGain(); num.mastered.connect(c.destination); }
+        if (!num.vocal) { num.vocal = c.createGain(); num.vocal.connect(c.destination); }
+        kho.dung(c, t, viTri, num.mastered, num.vocal);
+      }
       t0 = t;
       chay = true;
       if (khiDoi) khiDoi(true);
@@ -229,6 +244,64 @@ const may = (() => {
     },
   };
 })();
+
+/* ------------------------------------------------- chuỗi nghe thử tức thì
+ *
+ * Giữ hai stem thô + bộ lọc, và dựng lại đồ thị mỗi lần phát/tua. Dựng lại
+ * chứ không tái dùng vì BufferSource chỉ chạy được một lần; bù lại việc dựng
+ * chỉ là tạo mấy chục khối, mất chưa tới một mili giây.
+ *
+ * Bản nghe thử KHÔNG có nén và hạn đỉnh thật (xem chuoi.js), nên nó lệch bản
+ * tải về cỡ 1 dB ở hai đầu phổ. Đổi lại kéo thanh là nghe ngay thay vì chờ
+ * 20-30 giây. File giao cho khách vẫn do máy chủ render.
+ */
+const kho = {
+  vocal: null, nhac: null, loc: null, buGiong: 0, k: null,
+  san() { return !!(this.vocal && this.nhac && this.loc); },
+
+  /** Đặt mọi thanh lên đồ thị. Gọi cả lúc dựng lẫn lúc người dùng kéo. */
+  apDung(k) {
+    if (!k) return;
+    const v = (id) => +$(id).value;
+    const dB = (x) => Math.pow(10, x / 20);
+    const day = v("thickness") / 100, sang = v("presence") / 100;
+    k.buGiong.gain.value = dB(this.buGiong);
+    k.eqDuc.gain.value = -2.5 * sang;
+    k.eqNet.gain.value = 2.5 * sang;
+    k.eqThoang.gain.value = 3.0 * sang;
+    k.xiMuc.gain.value = -2 * (v("deess") / 100);
+    k.mucGiong.gain.value = dB(v("vocal_gain"));
+    k.day.forEach((m) => (m.gain.value = 0.55 * day));
+    const tone = v("tone") / 100;
+    k.canPhoMuc.gain.value = tone;
+    k.boPho.gain.value = 1 - tone;
+    k.eqTram.gain.value = v("bass");
+    k.eqCao.gain.value = v("air");
+    k.rong.gain.value = v("width") / 100;
+    // Độ to tính theo mức đã dựng, giống hệt cách thanh Loudness vẫn làm.
+    k.doTo.gain.value = dB(lufsDaDung === null ? 0 : v("lufs") - lufsDaDung);
+  },
+
+  /** Dựng đồ thị mới và cho chạy từ mốc `off`. */
+  dung(ctx, ts, off, raMaster, raVocal) {
+    if (!this.san()) return null;
+    const k = Chuoi.dung(ctx, this.vocal, this.nhac, this.loc, ts);
+    this.apDung(k);
+    k.ra.connect(raMaster);
+    k.chiGiong.connect(raVocal);
+    k.nguonVocal.start(ts, Math.min(off, this.vocal.duration - 0.01));
+    k.nguonNhac.start(ts, Math.min(off, this.nhac.duration - 0.01));
+    this.k = k;
+    return k;
+  },
+
+  ngat() {
+    if (!this.k) return;
+    try { this.k.nguonVocal.stop(); this.k.nguonNhac.stop(); } catch (_) {}
+    try { this.k.ra.disconnect(); this.k.chiGiong.disconnect(); } catch (_) {}
+    this.k = null;
+  },
+};
 
 function gio(t) {
   if (!isFinite(t)) return "0:00";
@@ -330,7 +403,8 @@ $("lufs").oninput = () => {
   veLufs();
   if (lufsDaDung === null) return;
   const lech = dichLufs - lufsDaDung;
-  may.buDoTo(lech);
+  // Độ to đi qua chuỗi khi chuỗi đang chạy, còn không thì dùng đường bù cũ.
+  if (kho.san()) kho.apDung(kho.k); else may.buDoTo(lech);
   veSong();                     // hình phải đổi theo tiếng
   // Cập nhật luôn con số LUFS trên khối kết quả, không thì nó nói một đằng mà
   // tai nghe một nẻo.
@@ -407,6 +481,7 @@ THANH.forEach((k) => {
     veThanh(k);
     boPreset();
     danhDauTay(k);            // người dùng vừa kéo tay -> tool đừng đè lên nữa
+    kho.apDung(kho.k);        // và nghe ngay, không đợi bấm Process
   };
   veThanh(k);
   if (THANG[k]) veThangDo(k, THANG[k]);
@@ -722,6 +797,27 @@ async function veKetQua(kq) {
   // Ngưỡng cũ là `lufs > -16 && dr < 11` — rộng tới mức mọi bản mix bình
   // thường đều dính, nên nó bắn cảnh báo "đây đã là bản master" vào đúng thứ
   // mà tool sinh ra để xử lý. Đã thấy nó bắn nhầm vào một bản mix -13,51 LUFS.
+  // Nạp hai stem thô + bộ lọc để dựng chuỗi nghe thử. Chạy nền, hỏng thì
+  // thôi — app vẫn nghe được bằng bản máy chủ đã render.
+  kho.vocal = kho.nhac = kho.loc = null;
+  kho.buGiong = (kq.bu_giong || 0) - (+$("vocal_gain").value || 0);
+  (async () => {
+    try {
+      const c = may.ctx();
+      const lay = async (u) => c.decodeAudioData(await (await fetch(u)).arrayBuffer());
+      const [v, nh, lc] = await Promise.all([
+        lay("/api/audio/" + maViec + "?kind=stem_vocal"),
+        lay("/api/audio/" + maViec + "?kind=stem_nhac"),
+        fetch("/api/loc?che_do=" + cheDo + "&sr=" + c.sampleRate)
+          .then((r) => r.json()),
+      ]);
+      const bl = c.createBuffer(1, lc.he_so.length, lc.sr);
+      bl.copyToChannel(Float32Array.from(lc.he_so), 0);
+      kho.vocal = v; kho.nhac = nh; kho.loc = bl;
+      $("song-song").hidden = false;
+    } catch (e) { /* không có chuỗi sống thì vẫn dùng bản đã render */ }
+  })();
+
   // Bản vừa dựng ở mức nào thì thanh về đúng đó, và bù độ to trở về 0.
   lufsDaDung = kq.after.lufs;
   $("lufs").value = Math.max(-11, Math.min(-7, lufsDaDung));

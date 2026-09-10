@@ -281,3 +281,13 @@
 
 /* Thanh có thang thì bớt khoảng cách dưới, không thì cột dài ra vô ích */
 .keo:has(.thang) { margin-bottom: 6px; }
+
+/* Nhãn báo đang nghe bản dựng trực tiếp trong trình duyệt.
+   Phải nói ra, vì bản này KHÔNG có nén và hạn đỉnh thật — lệch bản tải về cỡ
+   1 dB ở hai đầu phổ. Giấu chuyện đó đi thì người dùng chỉnh theo một thứ rồi
+   nhận về một thứ khác. */
+.song-song {
+  font-size: 10.5px;
+  color: var(--nhan2);
+  margin: 8px 0 0;
+}
